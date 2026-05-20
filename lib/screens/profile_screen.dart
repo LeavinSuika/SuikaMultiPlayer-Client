@@ -1,0 +1,258 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:suika_multi_player/providers/auth_provider.dart';
+
+class ProfileScreen extends ConsumerWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final user = auth.user;
+    final theme = Theme.of(context);
+
+    if (user == null) return const SizedBox.shrink();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 16),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.tertiary,
+                ],
+              ),
+            ),
+            child: Center(
+              child: Text(
+                user.nickname.isNotEmpty
+                    ? user.nickname[0].toUpperCase()
+                    : user.userName[0].toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            user.nickname,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.95),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '@${user.userName}',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withValues(alpha: 0.45),
+            ),
+          ),
+          const SizedBox(height: 24),
+          _InfoCard(
+            title: '用户 ID',
+            value: '#${user.userUuid.substring(0, 8)}...',
+            icon: Icons.fingerprint_rounded,
+          ),
+          const SizedBox(height: 12),
+          _InfoCard(
+            title: '角色',
+            value: user.isAdmin ? '管理员' : '普通用户',
+            icon: user.isAdmin ? Icons.admin_panel_settings_rounded : Icons.person_rounded,
+          ),
+          const SizedBox(height: 24),
+          _ActionButton(
+            icon: Icons.edit_rounded,
+            label: '修改昵称',
+            onTap: () => _showEditNickname(context, ref),
+          ),
+          const SizedBox(height: 12),
+          _ActionButton(
+            icon: Icons.lock_reset_rounded,
+            label: '修改密码',
+            onTap: () => _showChangePwd(context, ref),
+          ),
+          const SizedBox(height: 12),
+          _ActionButton(
+            icon: Icons.logout_rounded,
+            label: '退出登录',
+            onTap: () => ref.read(authProvider.notifier).logout(),
+            isDestructive: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditNickname(BuildContext context, WidgetRef ref) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('修改昵称'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '新昵称 (最多20字)'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () async {
+              final name = ctrl.text.trim();
+              if (name.isEmpty) return;
+              final user = ref.read(authProvider).user;
+              if (user == null) return;
+              try {
+                final api = ref.read(apiServiceProvider);
+                await api.updateNickname(
+                    userUuid: user.userUuid, nickname: name);
+                ref.read(authProvider.notifier).refreshUser();
+                Navigator.pop(ctx);
+              } catch (_) {}
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChangePwd(BuildContext context, WidgetRef ref) {
+    final oldCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('修改密码'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: oldCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(hintText: '旧密码'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: newCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(hintText: '新密码 (至少6位)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () async {
+              final user = ref.read(authProvider).user;
+              if (user == null) return;
+              try {
+                final api = ref.read(apiServiceProvider);
+                await api.resetPwd(
+                  userUuid: user.userUuid,
+                  oldPwd: oldCtrl.text,
+                  newPwd: newCtrl.text,
+                );
+                Navigator.pop(ctx);
+              } catch (_) {}
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+
+  const _InfoCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: Colors.white.withValues(alpha: 0.5)),
+            const SizedBox(width: 12),
+            Text(title,
+                style: TextStyle(
+                    fontSize: 13, color: Colors.white.withValues(alpha: 0.5))),
+            const Spacer(),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 14, color: Colors.white.withValues(alpha: 0.8))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(icon,
+                  size: 20,
+                  color: isDestructive
+                      ? Colors.redAccent.withValues(alpha: 0.8)
+                      : Colors.white.withValues(alpha: 0.6)),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDestructive
+                      ? Colors.redAccent.withValues(alpha: 0.8)
+                      : Colors.white.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
