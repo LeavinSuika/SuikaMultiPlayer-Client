@@ -80,17 +80,17 @@ class _MainShellState extends ConsumerState<MainShell> {
           _onPlayTrack(msg.data);
           break;
         case 'pause':
-          ref.read(playerProvider.notifier).audioPlayer.pause();
+          ref.read(playerProvider.notifier).pause();
           break;
         case 'resume':
-          ref.read(playerProvider.notifier).audioPlayer.play();
+          ref.read(playerProvider.notifier).play();
           break;
         case 'seek':
           final posMs = msg.data['pos'] as int? ?? 0;
           ref.read(playerProvider.notifier).seek(Duration(milliseconds: posMs));
           break;
         case 'pause_event':
-          ref.read(playerProvider.notifier).audioPlayer.pause();
+          ref.read(playerProvider.notifier).pause();
           break;
       }
     });
@@ -126,18 +126,18 @@ class _MainShellState extends ConsumerState<MainShell> {
     // 播放器未就绪 → 只同步播放/暂停状态，不 seek
     if (!player.isReady) {
       if (isPlaying && !player.playing) {
-        player.audioPlayer.play();
+        player.play();
       } else if (!isPlaying && player.playing) {
-        player.audioPlayer.pause();
+        player.pause();
       }
       return;
     }
 
     // 同步播放/暂停状态
     if (isPlaying && !player.playing) {
-      player.audioPlayer.play();
+      player.play();
     } else if (!isPlaying && player.playing) {
-      player.audioPlayer.pause();
+      player.pause();
     }
 
     // 同步播放位置（带冷却期，避免频繁 seek 打断 Windows 音频管道）

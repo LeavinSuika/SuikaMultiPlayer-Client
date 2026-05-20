@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:media_kit/media_kit.dart' hide Track;
 import 'package:suika_multi_player/models/lyrics.dart';
 import 'package:suika_multi_player/models/track.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
@@ -126,11 +126,13 @@ class PlayerState {
 class PlayerNotifier extends StateNotifier<PlayerState> {
   final ApiService _api;
   final WebsocketService _ws;
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  StreamSubscription? _playerStateSub;
+  final Player _player = Player();
+  StreamSubscription? _playingSub;
   StreamSubscription? _durationSub;
+  StreamSubscription? _positionSub;
+  StreamSubscription? _bufferingSub;
+  StreamSubscription? _completedSub;
   StreamSubscription? _errorSub;
-  Timer? _posTimer;
   Completer<void>? _readyCompleter;
   DateTime _lastSeekTime = DateTime.now();
 
@@ -138,100 +140,135 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     _init();
   }
 
+  bool _hasStartedPlaying = false;
+
   void _init() {
-    _playerStateSub = _audioPlayer.playerStateStream.listen((ps) {
-      // 先处理 ready completer（独立判断，不影响 playing 状态更新）
-      if (ps.processingState == ProcessingState.ready) {
-        _readyCompleter?.complete();
-        _readyCompleter = null;
-      }
-      // 再处理 playing 状态
-      if (ps.processingState == ProcessingState.completed) {
-        state = state.copyWith(status: PlayerStatus.idle, position: Duration.zero);
-      } else if (ps.playing) {
+    _playingSub = _player.stream.playing.listen((playing) {
+      if (playing) {
+        _hasStartedPlaying = true;
         state = state.copyWith(status: PlayerStatus.playing);
-      } else if (ps.processingState == ProcessingState.loading) {
-        state = state.copyWith(status: PlayerStatus.loading);
+        if (_readyCompleter != null) {
+          _readyCompleter!.complete();
+          _readyCompleter = null;
+        }
       } else {
-        if (state.status == PlayerStatus.playing || state.status == PlayerStatus.paused) {
+        if (state.status == PlayerStatus.playing ||
+            state.status == PlayerStatus.paused) {
           state = state.copyWith(status: PlayerStatus.paused);
         }
       }
     });
 
-    _durationSub = _audioPlayer.durationStream.listen((d) {
-      if (d != null) state = state.copyWith(duration: d);
-    });
-
-    _errorSub = _audioPlayer.playbackEventStream.listen((event) {
-      // just_audio_windows 的 BufferingProgress 错误可安全忽略
-    }, onError: (Object e) {
-      state = state.copyWith(status: PlayerStatus.error, error: e.toString());
-    });
-
-    _posTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
-      if (_audioPlayer.playing) {
-        state = state.copyWith(position: _audioPlayer.position);
+    _bufferingSub = _player.stream.buffering.listen((buffering) {
+      if (buffering && !_hasStartedPlaying) {
+        // 只在首次加载时设为 loading，播放中的重新缓冲不改变 UI 状态
+        state = state.copyWith(status: PlayerStatus.loading);
       }
+      if (!buffering && _player.state.duration > Duration.zero) {
+        if (_readyCompleter != null) {
+          _readyCompleter!.complete();
+          _readyCompleter = null;
+        }
+      }
+    });
+
+    _durationSub = _player.stream.duration.listen((d) {
+      if (d > Duration.zero) state = state.copyWith(duration: d);
+    });
+
+    _positionSub = _player.stream.position.listen((pos) {
+      state = state.copyWith(position: pos);
+    });
+
+    _completedSub = _player.stream.completed.listen((_) {
+      state = state.copyWith(
+          status: PlayerStatus.idle, position: Duration.zero);
+    });
+
+    _errorSub = _player.stream.error.listen((e) {
+      state = state.copyWith(status: PlayerStatus.error, error: e.toString());
     });
   }
 
   /// 播放器是否已缓冲就绪（可安全 seek）
   bool get isReady =>
-      _audioPlayer.playerState.processingState == ProcessingState.ready ||
-      _audioPlayer.playing;
+      !_player.state.buffering && _player.state.duration > Duration.zero;
 
-  /// 距离上次 seek 的时间，用于防止频繁 seek 打断 Windows 音频管道
-  Duration get _timeSinceLastSeek => DateTime.now().difference(_lastSeekTime);
+  Duration get _timeSinceLastSeek =>
+      DateTime.now().difference(_lastSeekTime);
 
   Future<void> playTrack(Track track) async {
-    state = state.copyWith(status: PlayerStatus.loading, currentTrack: track);
+    _hasStartedPlaying = false;
+    state =
+        state.copyWith(status: PlayerStatus.loading, currentTrack: track);
     try {
       final url = await _api.getMusicLink(track.id);
       _readyCompleter = Completer<void>();
-      await _audioPlayer.setUrl(url);
-      await _audioPlayer.play();
+      await _player.open(Media(url));
+      await _player.play();
     } catch (e) {
-      state = state.copyWith(status: PlayerStatus.error, error: e.toString());
+      state =
+          state.copyWith(status: PlayerStatus.error, error: e.toString());
     }
   }
 
-  /// 由服务器 play_track 消息触发 — 加载音频，seek 到服务器位置，再按需播放
-  Future<void> playTrackFromServer(Track track, int serverPos, bool isPlaying) async {
-    state = state.copyWith(status: PlayerStatus.loading, currentTrack: track);
+  /// 由服务器 play_track 消息触发 — 加载 → 暂停 → seek → 等缓冲 → 播放
+  Future<void> playTrackFromServer(
+      Track track, int serverPos, bool isPlaying) async {
+    _hasStartedPlaying = false;
+    state =
+        state.copyWith(status: PlayerStatus.loading, currentTrack: track);
     try {
       final url = await _api.getMusicLink(track.id);
-      _readyCompleter = Completer<void>();
-      await _audioPlayer.setUrl(url);
 
-      // 等待播放器进入 ready 状态再 seek，避免打断 Windows 音频初始化
-      await _readyCompleter!.future.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {},
-      );
+      // 1. 加载媒体
+      _readyCompleter = Completer<void>();
+      await _player.open(Media(url));
+      try {
+        await _readyCompleter!.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {},
+        );
+      } catch (_) {}
+
+      // 2. 暂停，防止输出位置 0 的缓冲数据
+      await _player.pause();
+
+      // 3. 跳到同步位置
+      if (serverPos > 0) {
+        _readyCompleter = Completer<void>();
+        await _player.seek(Duration(milliseconds: serverPos));
+        _lastSeekTime = DateTime.now();
+        if (!_player.state.buffering) {
+          _readyCompleter?.complete();
+        }
+        try {
+          await _readyCompleter!.future.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {},
+          );
+        } catch (_) {}
+      }
       _readyCompleter = null;
 
-      if (serverPos > 0) {
-        await _audioPlayer.seek(Duration(milliseconds: serverPos));
-        _lastSeekTime = DateTime.now();
-      }
+      // 4. 按需播放
       if (isPlaying) {
-        await _audioPlayer.play();
+        await _player.play();
       }
     } catch (e) {
-      state = state.copyWith(status: PlayerStatus.error, error: e.toString());
+      state =
+          state.copyWith(status: PlayerStatus.error, error: e.toString());
     }
   }
 
   /// 由 playback_state 同步调用 — 只在必要时 seek，避免频繁打断播放
   Future<void> syncSeek(int targetMs) async {
     if (!isReady) return;
-    // 冷却期 2 秒，避免连续 seek 打断 Windows Media Foundation 管道
     if (_timeSinceLastSeek < const Duration(seconds: 2)) return;
 
-    final localMs = _audioPlayer.position.inMilliseconds;
+    final localMs = _player.state.position.inMilliseconds;
     if ((targetMs - localMs).abs() > 1000) {
-      await _audioPlayer.seek(Duration(milliseconds: targetMs));
+      await _player.seek(Duration(milliseconds: targetMs));
       _lastSeekTime = DateTime.now();
     }
   }
@@ -239,50 +276,59 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   Future<void> stop() async {
     _readyCompleter = null;
     try {
-      await _audioPlayer.stop();
-      state = state.copyWith(status: PlayerStatus.idle, position: Duration.zero, currentTrack: null);
+      await _player.stop();
+      state = state.copyWith(
+          status: PlayerStatus.idle,
+          position: Duration.zero,
+          currentTrack: null);
     } catch (_) {}
   }
 
+  /// 仅供外部同步使用（main_shell pause/resume 消息）
+  Future<void> play() => _player.play();
+  Future<void> pause() => _player.pause();
+
   Future<void> togglePlayPause() async {
     if (state.currentTrack == null) return;
-    if (_audioPlayer.playing) {
-      await _audioPlayer.pause();
+    if (_player.state.playing) {
+      await _player.pause();
       _ws.sendPause();
     } else if (state.status == PlayerStatus.idle) {
       await playTrack(state.currentTrack!);
     } else {
-      await _audioPlayer.play();
+      await _player.play();
       _ws.sendResume();
     }
   }
 
   void seek(Duration pos) {
-    _audioPlayer.seek(pos);
+    _player.seek(pos);
     state = state.copyWith(position: pos);
     _lastSeekTime = DateTime.now();
     _ws.sendSeek(pos.inMilliseconds);
   }
 
-  AudioPlayer get audioPlayer => _audioPlayer;
+  // --- 公共 getter/setter（UI 通过 PlayerState 访问，不再暴露原生 Player）---
+  // 音量内部存储为 0-1（匹配 Flutter Slider），调用 media_kit 时转换为 0-100
   Track? get currentTrack => state.currentTrack;
-  Duration get position => _audioPlayer.position;
-  Duration? get duration => _audioPlayer.duration;
-  Stream<Duration> get positionStream => _audioPlayer.positionStream;
-  bool get playing => _audioPlayer.playing;
+  Duration get position => _player.state.position;
+  Duration? get duration => _player.state.duration;
+  bool get playing => _player.state.playing;
   double get volume => state.volume;
   set volume(double v) {
-    _audioPlayer.setVolume(v);
+    _player.setVolume(v * 100);
     state = state.copyWith(volume: v);
   }
 
   @override
   void dispose() {
-    _posTimer?.cancel();
-    _playerStateSub?.cancel();
+    _playingSub?.cancel();
+    _bufferingSub?.cancel();
     _durationSub?.cancel();
+    _positionSub?.cancel();
+    _completedSub?.cancel();
     _errorSub?.cancel();
-    _audioPlayer.dispose();
+    _player.dispose();
     super.dispose();
   }
 }
