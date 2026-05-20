@@ -212,7 +212,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     }
   }
 
-  /// 由服务器 play_track 消息触发 — 加载 → 暂停 → seek → 等缓冲 → 播放
+  /// 由服务器 play_track 消息触发 — 不自动播放加载 → seek → 按需播放
   Future<void> playTrackFromServer(
       Track track, int serverPos, bool isPlaying) async {
     _hasStartedPlaying = false;
@@ -221,29 +221,29 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     try {
       final url = await _api.getMusicLink(track.id);
 
-      // 1. 加载媒体
-      _readyCompleter = Completer<void>();
-      await _player.open(Media(url));
+      // 1. 加载媒体但不自动播放（play: false），防止输出位置 0 的音频
+      final openReady = Completer<void>();
+      _readyCompleter = openReady;
+      await _player.open(Media(url), play: false);
+      // 等待缓冲就绪（listener 可能在 open 期间已完成 completer，所以用局部变量防 NPE）
       try {
-        await _readyCompleter!.future.timeout(
+        await openReady.future.timeout(
           const Duration(seconds: 5),
           onTimeout: () {},
         );
       } catch (_) {}
 
-      // 2. 暂停，防止输出位置 0 的缓冲数据
-      await _player.pause();
-
-      // 3. 跳到同步位置
+      // 2. 跳到同步位置
       if (serverPos > 0) {
-        _readyCompleter = Completer<void>();
+        final seekReady = Completer<void>();
+        _readyCompleter = seekReady;
         await _player.seek(Duration(milliseconds: serverPos));
         _lastSeekTime = DateTime.now();
         if (!_player.state.buffering) {
-          _readyCompleter?.complete();
+          seekReady.complete();
         }
         try {
-          await _readyCompleter!.future.timeout(
+          await seekReady.future.timeout(
             const Duration(seconds: 5),
             onTimeout: () {},
           );
@@ -251,7 +251,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       }
       _readyCompleter = null;
 
-      // 4. 按需播放
+      // 3. 按需播放
       if (isPlaying) {
         await _player.play();
       }
