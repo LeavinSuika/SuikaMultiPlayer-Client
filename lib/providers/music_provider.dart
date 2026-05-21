@@ -84,7 +84,7 @@ class LyricsNotifier extends StateNotifier<AsyncValue<Lyrics?>> {
   }
 }
 
-final lyricsProvider = StateNotifierProvider.autoDispose<LyricsNotifier, AsyncValue<Lyrics?>>((ref) {
+final lyricsProvider = StateNotifierProvider<LyricsNotifier, AsyncValue<Lyrics?>>((ref) {
   return LyricsNotifier(ref.watch(apiServiceProvider));
 });
 

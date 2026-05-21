@@ -12,8 +12,6 @@ class RoomListView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final roomState = ref.watch(roomProvider);
-    final auth = ref.watch(authProvider);
-    final theme = Theme.of(context);
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -31,16 +29,7 @@ class RoomListView extends ConsumerWidget {
           const SizedBox(height: 20),
           Expanded(
             child: roomState.currentRoom != null
-                ? _CurrentRoomCard(
-                    room: roomState.currentRoom!,
-                    onLeave: () {
-                      final user = ref.read(authProvider).user;
-                      if (user != null) {
-                        ref.read(playerProvider.notifier).stop();
-                        ref.read(roomProvider.notifier).leaveRoom(user.userUuid);
-                      }
-                    },
-                  )
+                ? _CurrentRoomCard(room: roomState.currentRoom!)
                 : _NoRoomPlaceholder(
                     onCreate: () {},
                   ),
@@ -53,9 +42,8 @@ class RoomListView extends ConsumerWidget {
 
 class _CurrentRoomCard extends ConsumerWidget {
   final RoomDetail room;
-  final VoidCallback onLeave;
 
-  const _CurrentRoomCard({required this.room, required this.onLeave});
+  const _CurrentRoomCard({required this.room});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -126,31 +114,141 @@ class _CurrentRoomCard extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      ref.read(sidebarTabProvider.notifier).state =
-                          SidebarTab.player;
-                    },
-                    child: const Text('进入歌词'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton(
-                  onPressed: onLeave,
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                        color: Colors.redAccent.withValues(alpha: 0.5)),
-                    foregroundColor: Colors.redAccent.withValues(alpha: 0.8),
-                  ),
-                  child: const Text('离开房间'),
-                ),
-              ],
+            _PlaybackStatus(room: room),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  final user = ref.read(authProvider).user;
+                  if (user == null) return;
+                  ref.read(playerProvider.notifier).stop();
+                  ref.read(roomProvider.notifier).switchRoom(
+                    Room(
+                      roomId: room.roomId,
+                      name: room.roomName,
+                      creatorUuid: room.creatorUuid,
+                      isPublic: room.isPublic,
+                      createdAt: DateTime.now(),
+                    ),
+                    user.userUuid,
+                  );
+                  ref.read(sidebarTabProvider.notifier).state = SidebarTab.player;
+                },
+                child: const Text('进入房间'),
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PlaybackStatus extends ConsumerWidget {
+  final RoomDetail room;
+  const _PlaybackStatus({required this.room});
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pstate = room.playstatus;
+
+    if (pstate == null || pstate.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.music_note_rounded, size: 16,
+                color: Colors.white.withValues(alpha: 0.3)),
+            const SizedBox(width: 8),
+            Text('暂无播放',
+                style: TextStyle(fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.35))),
+          ],
+        ),
+      );
+    }
+
+    final trackId = pstate['track_id'] as String? ?? '';
+    final isPlaying = pstate['is_playing'] as bool? ?? false;
+    final pos = pstate['pos'] as int? ?? 0;
+    final duration = pstate['duration'] as int? ?? 0;
+
+    final track = ref.watch(trackCacheProvider)[trackId];
+    if (track == null && trackId.isNotEmpty) {
+      ref.read(trackCacheProvider.notifier).fetchIfNeeded(trackId);
+    }
+
+    final trackName = track?.name ?? trackId;
+    final progress = duration > 0 ? (pos / duration).clamp(0.0, 1.0) : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isPlaying ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                size: 16,
+                color: isPlaying
+                    ? Colors.greenAccent.withValues(alpha: 0.8)
+                    : Colors.amberAccent.withValues(alpha: 0.8),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  trackName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13,
+                      color: Colors.white.withValues(alpha: 0.7)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 3,
+                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isPlaying
+                          ? Colors.greenAccent.withValues(alpha: 0.6)
+                          : Colors.amberAccent.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${_fmt(Duration(milliseconds: pos))} / ${_fmt(Duration(milliseconds: duration))}',
+                style: TextStyle(fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.35)),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

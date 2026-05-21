@@ -28,27 +28,29 @@ class RoomState {
     this.ownerUuid,
   });
 
+  static const _sentinel = Object();
+
   RoomState copyWith({
     bool? isLoading,
-    String? error,
-    RoomDetail? currentRoom,
-    int? enteredRoomId,
+    Object? error = _sentinel,
+    Object? currentRoom = _sentinel,
+    Object? enteredRoomId = _sentinel,
     Map<int, Room>? roomCache,
     List<int>? joinedRoomIds,
     List<String>? onlineUsers,
     List<String>? playlist,
-    String? ownerUuid,
+    Object? ownerUuid = _sentinel,
   }) =>
       RoomState(
         isLoading: isLoading ?? this.isLoading,
-        error: error,
-        currentRoom: currentRoom ?? this.currentRoom,
-        enteredRoomId: enteredRoomId ?? this.enteredRoomId,
+        error: identical(error, _sentinel) ? this.error : error as String?,
+        currentRoom: identical(currentRoom, _sentinel) ? this.currentRoom : currentRoom as RoomDetail?,
+        enteredRoomId: identical(enteredRoomId, _sentinel) ? this.enteredRoomId : enteredRoomId as int?,
         roomCache: roomCache ?? this.roomCache,
         joinedRoomIds: joinedRoomIds ?? this.joinedRoomIds,
         onlineUsers: onlineUsers ?? this.onlineUsers,
         playlist: playlist ?? this.playlist,
-        ownerUuid: ownerUuid ?? this.ownerUuid,
+        ownerUuid: identical(ownerUuid, _sentinel) ? this.ownerUuid : ownerUuid as String?,
       );
 }
 

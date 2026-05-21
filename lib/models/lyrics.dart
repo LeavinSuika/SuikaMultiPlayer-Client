@@ -31,6 +31,7 @@ class Lyrics {
   const Lyrics({required this.lines, this.transLines});
 
   bool get hasWordTiming => lines.any((l) => l.words != null && l.words!.isNotEmpty);
+  bool get hasTranslation => transLines != null && transLines!.isNotEmpty;
 
   static List<LyricLine> _parseLrc(String text) {
     final lines = <LyricLine>[];
@@ -74,8 +75,10 @@ class Lyrics {
         final wDur = int.parse(wm.group(2)!);
         final wText = wm.group(3)?.trim() ?? '';
         if (wText.isNotEmpty) {
+          // YRC 格式中 word time 是绝对时间（相对歌曲开头），
+          // LyricWord.startTime 需要是相对行首的时间
           words.add(LyricWord(
-            startTime: Duration(milliseconds: wStart),
+            startTime: Duration(milliseconds: wStart - startMs),
             duration: Duration(milliseconds: wDur),
             text: wText,
           ));
@@ -98,11 +101,18 @@ class Lyrics {
     return lines;
   }
 
+  /// 从嵌套结构提取歌词文本：支持直接字符串或 {version, lyric} 对象两种格式
+  static String? _extractLyricText(dynamic field) {
+    if (field == null) return null;
+    if (field is String) return field;
+    if (field is Map<String, dynamic>) return field['lyric'] as String?;
+    return null;
+  }
+
   factory Lyrics.fromServerResponse(Map<String, dynamic> json) {
-    final raw = json['lrc'] ?? json;
-    final lrcText = raw['lrc'] as String?;
-    final yrcText = raw['yrc'] as String?;
-    final tlyricText = raw['tlyric'] as String?;
+    final lrcText = _extractLyricText(json['lrc']);
+    final yrcText = _extractLyricText(json['yrc']);
+    final tlyricText = _extractLyricText(json['tlyric']);
 
     final hasYrc = yrcText != null && yrcText.isNotEmpty;
     final lines = hasYrc ? _parseYrc(yrcText) : _parseLrc(lrcText ?? '');
@@ -111,6 +121,21 @@ class Lyrics {
         : null;
 
     return Lyrics(lines: lines, transLines: transLines);
+  }
+
+  /// 为每个原始歌词行匹配最接近的翻译行（300ms 容差内）
+  String? getTranslationForLine(LyricLine line) {
+    if (transLines == null || transLines!.isEmpty) return null;
+    LyricLine? best;
+    var bestDiff = double.infinity;
+    for (final tl in transLines!) {
+      final diff = (tl.time - line.time).inMilliseconds.abs();
+      if (diff < 300 && diff < bestDiff) {
+        bestDiff = diff.toDouble();
+        best = tl;
+      }
+    }
+    return best?.text;
   }
 
   int findCurrentIndex(Duration position) {
