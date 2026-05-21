@@ -306,8 +306,8 @@ class _NowPlayingPageState extends ConsumerState<_NowPlayingPage> {
     }
     final focusedIdx = _isManualScrolling ? _manualFocusIdx : autoIdx;
 
-    final hasKaraoke = lyrics.hasWordTiming && widget.useKaraoke;
-    final hasTranslation = lyrics.hasTranslation && widget.showTranslation;
+    final karaokeAvailable = lyrics.hasWordTiming;
+    final translationAvailable = lyrics.hasTranslation;
 
     return Stack(
       children: [
@@ -358,8 +358,8 @@ class _NowPlayingPageState extends ConsumerState<_NowPlayingPage> {
             ],
           ),
         ),
-        // ---- 右下角切换按钮 ----
-        if (hasKaraoke || hasTranslation)
+        // ---- 右下角切换按钮（有功能就始终显示） ----
+        if (karaokeAvailable || translationAvailable)
           Positioned(
             right: 12,
             bottom: 12,
@@ -717,37 +717,20 @@ class _LyricsPanel extends StatefulWidget {
 }
 
 class _LyricsPanelState extends State<_LyricsPanel> {
-  double _estimateLineHeight(int i) {
-    if (widget.lineHeights.containsKey(i)) {
-      return widget.lineHeights[i]!;
-    }
-    final line = widget.lyrics.lines[i];
-    double h = _kBaseFontSize * _kLineHeight;
-    if (line.text.isEmpty) {
-      h = 32; // interlude 行
-    } else if (widget.showTranslation &&
-        widget.hasTranslation &&
-        line.text.isNotEmpty) {
-      final tl = widget.lyrics.getTranslationForLine(line);
-      if (tl != null && tl.isNotEmpty) h += 6.0 + 18.0;
-    }
-    return h + 4.0;
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
+  final Map<int, double> _lineHeightsCache = {};
+  double? _lastWidth;
+  bool? _lastShowTranslation;
+  Lyrics? _lastLyrics;
 
   @override
   Widget build(BuildContext context) {
     final lines = widget.lyrics.lines;
+    final hasKaraoke = widget.hasKaraoke && widget.useKaraoke;
 
     return LayoutBuilder(builder: (ctx, constraints) {
       final cw = constraints.maxWidth;
       final ch = constraints.maxHeight;
 
-      // 通知父级容器尺寸
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.onContainerSize(cw, ch);
       });
@@ -755,47 +738,55 @@ class _LyricsPanelState extends State<_LyricsPanel> {
       final containerHeight = ch > 0 ? ch : widget.containerHeight;
       if (containerHeight <= 0) return const SizedBox.shrink();
 
+      // 容器宽度、翻译开关或歌词数据变了 → 清除高度缓存
+      final showTl = widget.showTranslation && widget.hasTranslation;
+      if (_lastWidth != cw ||
+          _lastShowTranslation != showTl ||
+          _lastLyrics != widget.lyrics) {
+        _lineHeightsCache.clear();
+        _lastWidth = cw;
+        _lastShowTranslation = showTl;
+        _lastLyrics = widget.lyrics;
+      }
+
+      // 用 TextPainter 精确预计算每行高度
+      final usableWidth = math.max(cw - 24.0, 100.0); // 减去 padding
+      _precomputeHeights(lines, usableWidth, hasKaraoke, showTl);
+
       final maxIdx = math.max(0, lines.length - 1);
       final current = math.min(math.max(widget.focusedIdx, 0), maxIdx);
-      final alignmentPct = 0.50; // 当前行在容器 50% 位置
 
-      // 计算每行的 top 位置（使用估算高度）
       final transforms = <_LineTransform>[];
       for (int i = 0; i < lines.length; i++) {
         transforms.add(_LineTransform());
       }
 
-      // 当前行
-      final curHeight = _estimateLineHeight(current);
+      final curHeight = _lineHeightsCache[current] ?? 40.0;
       transforms[current].top =
-          containerHeight * alignmentPct - curHeight / 2;
+          containerHeight * 0.50 - curHeight / 2;
       transforms[current].scale = 1.0;
       transforms[current].opacity = 1.0;
       transforms[current].blur = 0.0;
 
-      // 当前行之上的行（向上排列）
       for (int i = current - 1; i >= 0; i--) {
         final offset = current - i;
         transforms[i].scale = _scaleByOffset(offset);
         transforms[i].opacity = _opacityByOffset(offset);
         transforms[i].blur = _blurByOffset(offset);
-        final scaledH = _estimateLineHeight(i) * transforms[i].scale;
-        final spacing = _kLineSpacing * transforms[i].scale;
-        transforms[i].top =
-            transforms[i + 1].top - scaledH - spacing;
+        final scaledH = (_lineHeightsCache[i] ?? 40.0) * transforms[i].scale;
+        final sp = _kLineSpacing * transforms[i].scale;
+        transforms[i].top = transforms[i + 1].top - scaledH - sp;
       }
 
-      // 当前行之下的行（向下排列）
       for (int i = current + 1; i < lines.length; i++) {
         final offset = i - current;
         transforms[i].scale = _scaleByOffset(offset);
         transforms[i].opacity = _opacityByOffset(offset);
         transforms[i].blur = _blurByOffset(offset);
         final prevScaledH =
-            _estimateLineHeight(i - 1) * transforms[i - 1].scale;
-        final spacing = _kLineSpacing * transforms[i - 1].scale;
-        transforms[i].top =
-            transforms[i - 1].top + prevScaledH + spacing;
+            (_lineHeightsCache[i - 1] ?? 40.0) * transforms[i - 1].scale;
+        final sp = _kLineSpacing * transforms[i - 1].scale;
+        transforms[i].top = transforms[i - 1].top + prevScaledH + sp;
       }
 
       return ClipRect(
@@ -835,15 +826,63 @@ class _LyricsPanelState extends State<_LyricsPanel> {
                     lyrics: widget.lyrics,
                     transform: transforms[i],
                     onTap: () => widget.onTapLine(lines[i]),
-                    onHeightMeasured: (h) {
-                      widget.lineHeights[i] = h;
-                    },
+                    onHeightMeasured: (_) {},
                   ),
             ],
           ),
         ),
       );
     });
+  }
+
+  void _precomputeHeights(
+      List<LyricLine> lines, double maxWidth, bool karaoke, bool showTl) {
+    for (int i = 0; i < lines.length; i++) {
+      if (_lineHeightsCache.containsKey(i)) continue;
+      final line = lines[i];
+      double h = 0;
+
+      if (line.text.isEmpty) {
+        h = 32;
+      } else {
+        final hasWords = karaoke && line.words != null;
+        final fontSize = _kBaseFontSize;
+        final textStyle = TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+          height: _kLineHeight,
+        );
+        if (hasWords) {
+          // 逐字模式：用完整文本排版
+          final displayText = line.words!.map((w) => w.text).join();
+          h += _measureText(displayText, textStyle, maxWidth);
+        } else {
+          h += _measureText(line.text, textStyle, maxWidth);
+        }
+
+        if (showTl) {
+          final tl = widget.lyrics.getTranslationForLine(line);
+          if (tl != null && tl.isNotEmpty) {
+            final tlStyle = TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w500,
+              height: 1.3,
+            );
+            h += 4 + _measureText(tl, tlStyle, maxWidth);
+          }
+        }
+      }
+      _lineHeightsCache[i] = h + 8; // padding
+    }
+  }
+
+  double _measureText(String text, TextStyle style, double maxWidth) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: ui.TextDirection.ltr,
+      maxLines: null,
+    )..layout(maxWidth: maxWidth);
+    return tp.height;
   }
 
   static double _scaleByOffset(int offset) {
@@ -1090,6 +1129,7 @@ class _KaraokeWords extends StatelessWidget {
           lineStart: lineStart,
           isCurrentLine: isCurrent,
           position: position,
+          trailingSpace: word.trailingSpace == true,
         );
       }).toList(),
     );
@@ -1101,12 +1141,14 @@ class _KaraokeWord extends StatelessWidget {
   final Duration lineStart;
   final bool isCurrentLine;
   final Duration position;
+  final bool trailingSpace;
 
   const _KaraokeWord({
     required this.word,
     required this.lineStart,
     required this.isCurrentLine,
     required this.position,
+    this.trailingSpace = false,
   });
 
   @override
@@ -1132,29 +1174,41 @@ class _KaraokeWord extends StatelessWidget {
     // Float 动画：当前字的亮色部分上移 2px，非当前字下沉到原始位置
     final floatOffset = isCurrentLine ? -2.0 * progress : 0.0;
 
+    // 与 _buildPlainText 保持样式一致
+    final baseFontSize = isCurrentLine ? _kBaseFontSize : 22.0;
+    final baseWeight = isCurrentLine ? FontWeight.w700 : FontWeight.w500;
+
     final dimStyle = TextStyle(
-      fontSize: _kBaseFontSize,
-      fontWeight: FontWeight.w700,
-      color: Colors.white.withValues(alpha: 0.38),
+      fontSize: baseFontSize,
+      fontWeight: baseWeight,
+      color: Colors.white.withValues(alpha: 0.4),
       height: _kLineHeight,
     );
     final brightStyle = TextStyle(
-      fontSize: _kBaseFontSize,
-      fontWeight: FontWeight.w700,
+      fontSize: baseFontSize,
+      fontWeight: baseWeight,
       color: Colors.white,
       height: _kLineHeight,
       shadows: isCurrentLine
           ? [
               Shadow(
-                blurRadius: 14,
-                color: Colors.white.withValues(alpha: 0.22),
+                blurRadius: 16,
+                color: Colors.white.withValues(alpha: 0.25),
+              ),
+              Shadow(
+                blurRadius: 32,
+                color: Colors.white.withValues(alpha: 0.1),
+                offset: const Offset(0, 3),
               ),
             ]
           : null,
     );
 
+    // 原 YRC 文本中词后有空格 → 渲染时补上间距
+    final rightPad = trailingSpace == true ? 4.0 : 1.0;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 1),
+      padding: EdgeInsets.only(left: 1, right: rightPad),
       child: Stack(
         clipBehavior: Clip.hardEdge,
         children: [

@@ -16,11 +16,13 @@ class LyricWord {
   final Duration startTime;
   final Duration duration;
   final String text;
+  final bool? trailingSpace;
 
   const LyricWord({
     required this.startTime,
     required this.duration,
     required this.text,
+    this.trailingSpace,
   });
 }
 
@@ -73,7 +75,9 @@ class Lyrics {
       for (final wm in wordRegExp.allMatches(content)) {
         final wStart = int.parse(wm.group(1)!);
         final wDur = int.parse(wm.group(2)!);
-        final wText = wm.group(3)?.trim() ?? '';
+        final rawText = wm.group(3) ?? '';
+        final trailingSpace = rawText.endsWith(' ');
+        final wText = rawText.trim();
         if (wText.isNotEmpty) {
           // YRC 格式中 word time 是绝对时间（相对歌曲开头），
           // LyricWord.startTime 需要是相对行首的时间
@@ -81,14 +85,25 @@ class Lyrics {
             startTime: Duration(milliseconds: wStart - startMs),
             duration: Duration(milliseconds: wDur),
             text: wText,
+            trailingSpace: trailingSpace,
           ));
         }
       }
 
-      final plainText = content.replaceAll(wordRegExp, '').trim();
-      final displayText = words.isNotEmpty
-          ? words.map((w) => w.text).join()
-          : plainText;
+      // 用 displayText 做纯文本显示，词间按需要补空格
+      String displayText;
+      if (words.isNotEmpty) {
+        final buf = StringBuffer();
+        for (int j = 0; j < words.length; j++) {
+          buf.write(words[j].text);
+          if (words[j].trailingSpace == true && j < words.length - 1) {
+            buf.write(' ');
+          }
+        }
+        displayText = buf.toString();
+      } else {
+        displayText = content.replaceAll(RegExp(r'\(\d+,\d+,\d+\)'), '').trim();
+      }
 
       lines.add(LyricLine(
         time: Duration(milliseconds: startMs),
@@ -123,19 +138,30 @@ class Lyrics {
     return Lyrics(lines: lines, transLines: transLines);
   }
 
-  /// 为每个原始歌词行匹配最接近的翻译行（300ms 容差内）
+  /// 为每个原始歌词行匹配翻译行：优先按行号匹配，兜底用时间就近匹配
   String? getTranslationForLine(LyricLine line) {
     if (transLines == null || transLines!.isEmpty) return null;
+
+    // 首选：同序号匹配（绝大多数歌曲原文和译文一一对应）
+    final idx = lines.indexOf(line);
+    if (idx >= 0 && idx < transLines!.length) {
+      final match = transLines![idx];
+      if ((match.time - line.time).inMilliseconds.abs() < 8000) {
+        return match.text;
+      }
+    }
+
+    // 兜底：最近时间匹配
     LyricLine? best;
     var bestDiff = double.infinity;
     for (final tl in transLines!) {
       final diff = (tl.time - line.time).inMilliseconds.abs();
-      if (diff < 300 && diff < bestDiff) {
+      if (diff < bestDiff) {
         bestDiff = diff.toDouble();
         best = tl;
       }
     }
-    return best?.text;
+    return bestDiff < 8000 ? best?.text : null;
   }
 
   int findCurrentIndex(Duration position) {
