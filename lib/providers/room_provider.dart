@@ -86,11 +86,6 @@ class RoomNotifier extends StateNotifier<RoomState> {
             createdAt: DateTime.tryParse(r['created_at'] as String? ?? '') ?? DateTime.now(),
           ),
         });
-        if (state.currentRoom == null) {
-          final detail = await _api.fetchRoom(id);
-          state = state.copyWith(currentRoom: detail, enteredRoomId: id);
-          _ws.connect(userUuid: userUuid, roomId: id.toString());
-        }
       }
     } catch (_) {}
   }
@@ -101,7 +96,7 @@ class RoomNotifier extends StateNotifier<RoomState> {
       final room = await _api.createRoom(name: name, creatorUuid: creatorUuid);
       final detail = await _api.fetchRoom(room.roomId);
       final jids = [...state.joinedRoomIds];
-      if (!jids.contains(room.roomId)) jids.add(room.roomId);
+      if (!jids.contains(room.roomId)) jids.insert(0, room.roomId);
       state = state.copyWith(
         isLoading: false,
         currentRoom: detail,
@@ -123,13 +118,23 @@ class RoomNotifier extends StateNotifier<RoomState> {
     try {
       final detail = await _api.joinRoom(roomId: roomId, userUuid: userUuid);
       final jids = [...state.joinedRoomIds];
-      if (!jids.contains(roomId)) jids.add(roomId);
+      if (!jids.contains(roomId)) jids.insert(0, roomId);
       state = state.copyWith(
         isLoading: false,
         currentRoom: detail,
         enteredRoomId: roomId,
         joinedRoomIds: jids,
         playlist: detail.playlist,
+        roomCache: {
+          ...state.roomCache,
+          roomId: Room(
+            roomId: detail.roomId,
+            name: detail.roomName,
+            creatorUuid: detail.creatorUuid,
+            isPublic: detail.isPublic,
+            createdAt: DateTime.now(),
+          ),
+        },
       );
       _ws.disconnect();
       _ws.connect(userUuid: userUuid, roomId: roomId.toString());
@@ -139,7 +144,25 @@ class RoomNotifier extends StateNotifier<RoomState> {
     }
   }
 
+  /// 退出房间同步（保留成员身份，仅断开实时连接）。
   /// Returns null on success, or an error message string on failure.
+  Future<String?> exitRoom(String userUuid) async {
+    if (state.currentRoom == null) return null;
+    final roomId = state.currentRoom!.roomId;
+    _ws.disconnect();
+    try {
+      await _api.exitRoom(roomId: roomId, userUuid: userUuid);
+    } catch (_) {}
+    state = state.copyWith(
+      currentRoom: null,
+      enteredRoomId: null,
+      onlineUsers: const [],
+      playlist: const [],
+    );
+    return null;
+  }
+
+  /// 离开房间（移除成员身份）。Returns null on success, or an error message string on failure.
   Future<String?> leaveRoom(String userUuid) async {
     if (state.currentRoom == null) return null;
     final roomId = state.currentRoom!.roomId;

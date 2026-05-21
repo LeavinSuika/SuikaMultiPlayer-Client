@@ -4,6 +4,8 @@ import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/music_provider.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/sidebar_provider.dart';
+import 'package:suika_multi_player/models/track.dart';
+import 'package:suika_multi_player/providers/websocket_provider.dart';
 
 class IconSidebar extends ConsumerWidget {
   const IconSidebar({super.key});
@@ -19,6 +21,14 @@ class IconSidebar extends ConsumerWidget {
     );
   }
 
+  void _showSearchOverlay(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => const _SearchOverlay(),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -26,6 +36,8 @@ class IconSidebar extends ConsumerWidget {
     final roomState = ref.watch(roomProvider);
     final currentRoom = roomState.currentRoom;
     final exitedRoomId = ref.watch(exitedRoomIdProvider);
+    final isInRoom = roomState.enteredRoomId != null;
+    final canSearch = isInRoom && selectedTab == SidebarTab.player;
 
     return Container(
       width: 64,
@@ -80,9 +92,11 @@ class IconSidebar extends ConsumerWidget {
                 _SidebarIcon(
                   icon: Icons.search_rounded,
                   label: '搜索',
-                  isSelected: selectedTab == SidebarTab.search,
-                  onTap: () => ref.read(sidebarTabProvider.notifier).state =
-                      SidebarTab.search,
+                  isSelected: false,
+                  enabled: canSearch,
+                  onTap: canSearch
+                      ? () => _showSearchOverlay(context, ref)
+                      : null,
                 ),
                 const SizedBox(height: 4),
                 _SidebarIcon(
@@ -254,7 +268,8 @@ class _SidebarIcon extends StatelessWidget {
   final String label;
   final bool isSelected;
   final bool isJoin;
-  final VoidCallback onTap;
+  final bool enabled;
+  final VoidCallback? onTap;
 
   const _SidebarIcon({
     required this.icon,
@@ -262,20 +277,20 @@ class _SidebarIcon extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     this.isJoin = false,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = isSelected
-        ? Colors.white
-        : Colors.white.withValues(alpha: 0.45);
+    final baseColor = isSelected ? Colors.white : Colors.white.withValues(alpha: 0.45);
+    final color = enabled ? baseColor : Colors.white.withValues(alpha: 0.15);
 
     return Padding(
       padding: EdgeInsets.only(top: isJoin ? 12 : 0),
       child: GestureDetector(
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         child: Tooltip(
-          message: label,
+          message: enabled ? label : label,
           child: Container(
             width: 48,
             height: 48,
@@ -303,6 +318,168 @@ class _SidebarIcon extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SearchOverlay extends ConsumerStatefulWidget {
+  const _SearchOverlay();
+
+  @override
+  ConsumerState<_SearchOverlay> createState() => _SearchOverlayState();
+}
+
+class _SearchOverlayState extends ConsumerState<_SearchOverlay> {
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _addTrack(Track track) {
+    final room = ref.read(roomProvider);
+    if (room.currentRoom == null) return;
+    ref.read(trackCacheProvider.notifier).cache(track);
+    ref.read(websocketProvider).sendPlaylistAdd([
+      {'track_id': track.id, 'duration': track.durationMs ?? 0}
+    ]);
+    final newList = [...room.playlist, track.id];
+    ref.read(roomProvider.notifier).updatePlaylist(newList);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已添加: ${track.name}'), duration: const Duration(seconds: 1)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final results = ref.watch(searchProvider);
+
+    return Dialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 60),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 顶部：搜索框 + 关闭按钮
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: '搜索歌曲...',
+                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 14),
+                      prefixIcon: Icon(Icons.search_rounded, size: 20, color: Colors.white.withValues(alpha: 0.4)),
+                      suffixIcon: _searchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                ref.read(searchProvider.notifier).clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      isDense: true,
+                    ),
+                    onSubmitted: (v) {
+                      if (v.trim().isNotEmpty) {
+                        ref.read(searchProvider.notifier).search(v.trim());
+                      }
+                    },
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  color: Colors.white.withValues(alpha: 0.5),
+                  tooltip: '关闭',
+                ),
+              ],
+            ),
+          ),
+          // 结果列表
+          Flexible(
+            child: results.when(
+              data: (tracks) => tracks.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(40),
+                      child: Text(
+                        _searchCtrl.text.isNotEmpty ? '无搜索结果' : '输入关键词搜索歌曲',
+                        style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.35)),
+                      ),
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: tracks.length,
+                      itemBuilder: (_, i) => _TrackTile(
+                        track: tracks[i],
+                        onAdd: () => _addTrack(tracks[i]),
+                      ),
+                    ),
+              loading: () => const Padding(
+                padding: EdgeInsets.all(40),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (err, _) => Padding(
+                padding: const EdgeInsets.all(40),
+                child: Center(child: Text('搜索出错', style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.7)))),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrackTile extends StatelessWidget {
+  final Track track;
+  final VoidCallback onAdd;
+
+  const _TrackTile({required this.track, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      leading: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+        ),
+        child: track.coverUrl != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  track.coverUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Icon(Icons.music_note_rounded, size: 20, color: Colors.white.withValues(alpha: 0.5)),
+                ),
+              )
+            : Icon(Icons.music_note_rounded, size: 20, color: Colors.white.withValues(alpha: 0.5)),
+      ),
+      title: Text(track.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.9))),
+      subtitle: Text('${track.artist}${track.album != null ? ' · ${track.album}' : ''}',
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4))),
+      trailing: IconButton(
+        icon: Icon(Icons.add_circle_outline_rounded, size: 22, color: theme.colorScheme.primary),
+        onPressed: onAdd,
+        tooltip: '添加到歌单',
       ),
     );
   }

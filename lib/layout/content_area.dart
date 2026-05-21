@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/sidebar_provider.dart';
 import 'package:suika_multi_player/widgets/player/lyrics_view.dart';
-import 'package:suika_multi_player/widgets/search/search_view.dart';
+import 'package:suika_multi_player/widgets/room/room_list_view.dart';
 import 'package:suika_multi_player/screens/profile_screen.dart';
 import 'package:suika_multi_player/screens/settings_screen.dart';
 
@@ -12,14 +13,15 @@ class ContentArea extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tab = ref.watch(sidebarTabProvider);
+    final isInRoom = ref.watch(roomProvider).enteredRoomId != null;
 
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: switch (tab) {
-        SidebarTab.player => const LyricsView(),
-        SidebarTab.search => const SearchView(),
+        SidebarTab.player => isInRoom ? const LyricsView() : const RoomListView(),
         SidebarTab.profile => const ProfileScreen(),
         SidebarTab.settings => const SettingsScreen(),
+        _ => const LyricsView(),
       },
     );
   }

@@ -55,7 +55,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
     if (!isInRoom) return const SizedBox.shrink();
 
-    final track = player.currentTrack;
+    final track = player.status == PlayerStatus.idle ? null : player.currentTrack;
 
     return Container(
       height: 64,
@@ -200,6 +200,7 @@ class _ProgressBarState extends ConsumerState<_ProgressBar> {
                 value: pos.inMilliseconds.toDouble().clamp(0, max(duration.inMilliseconds.toDouble(), 1)),
                 max: max(duration.inMilliseconds.toDouble(), 1),
                 onChanged: (v) => ref.read(playerProvider.notifier).seek(Duration(milliseconds: v.toInt())),
+                onChangeEnd: (v) => ref.read(playerProvider.notifier).seekAndSync(Duration(milliseconds: v.toInt())),
               ),
             ),
           ),
@@ -347,10 +348,10 @@ class _ExitButton extends ConsumerWidget {
         final user = ref.read(authProvider).user;
         if (room.currentRoom == null || user == null) return;
 
-        final roomId = room.currentRoom!.roomId;
         ref.read(playerProvider.notifier).stop();
-        final msg = await ref.read(roomProvider.notifier).leaveRoom(user.userUuid);
-        ref.read(exitedRoomIdProvider.notifier).state = roomId;
+        final msg = await ref.read(roomProvider.notifier).exitRoom(user.userUuid);
+        ref.read(exitedRoomIdProvider.notifier).state = null;
+        ref.read(sidebarTabProvider.notifier).state = SidebarTab.player;
         if (msg != null && context.mounted) {
           showDialog(
             context: context,
@@ -368,12 +369,15 @@ class _ExitButton extends ConsumerWidget {
           );
         }
       },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Icon(
-          Icons.exit_to_app_rounded,
-          size: 20,
-          color: Colors.white.withValues(alpha: 0.5),
+      child: Tooltip(
+        message: '退出房间',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Icon(
+            Icons.logout_rounded,
+            size: 20,
+            color: Colors.white.withValues(alpha: 0.5),
+          ),
         ),
       ),
     );
@@ -396,10 +400,7 @@ class _PlaylistSheet extends ConsumerWidget {
               Text('歌单队列 (${playlist.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
               const Spacer(),
               TextButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ref.read(sidebarTabProvider.notifier).state = SidebarTab.search;
-                },
+                onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.add, size: 18), label: const Text('添加歌曲'),
               ),
             ]),

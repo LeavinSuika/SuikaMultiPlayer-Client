@@ -4,7 +4,6 @@ import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/music_provider.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/websocket_provider.dart';
-import 'package:suika_multi_player/providers/sidebar_provider.dart';
 import 'package:suika_multi_player/models/lyrics.dart';
 
 class LyricsView extends ConsumerStatefulWidget {
@@ -15,8 +14,6 @@ class LyricsView extends ConsumerStatefulWidget {
 }
 
 class _LyricsViewState extends ConsumerState<LyricsView> {
-  bool _wordMode = false;
-
   void _showJoinDialog(BuildContext context, WidgetRef ref) {
     final roomIdCtrl = TextEditingController();
     final nameCtrl = TextEditingController();
@@ -101,25 +98,15 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
         _LyricsTopBar(
           roomName: room.currentRoom!.roomName,
           onlineCount: room.onlineUsers.length,
-          wordMode: _wordMode,
-          onToggleMode: () => setState(() => _wordMode = !_wordMode),
-          onAddSong: () {
-            ref.read(sidebarTabProvider.notifier).state = SidebarTab.search;
-          },
         ),
         const Divider(height: 1),
         Expanded(
           child: playback == null || playback.trackId.isEmpty
               ? _EmptyPlayer(
                   isOwner: false,
-                  onAddSong: () {
-                    ref.read(sidebarTabProvider.notifier).state =
-                        SidebarTab.search;
-                  },
+                  onAddSong: () {},
                 )
-              : _wordMode
-                  ? _WordLyrics(lyrics: lyrics)
-                  : _ScrollingLyrics(lyrics: lyrics),
+              : _ScrollingLyrics(lyrics: lyrics),
         ),
       ],
     );
@@ -129,16 +116,10 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
 class _LyricsTopBar extends StatelessWidget {
   final String roomName;
   final int onlineCount;
-  final bool wordMode;
-  final VoidCallback onToggleMode;
-  final VoidCallback onAddSong;
 
   const _LyricsTopBar({
     required this.roomName,
     required this.onlineCount,
-    required this.wordMode,
-    required this.onToggleMode,
-    required this.onAddSong,
   });
 
   @override
@@ -176,25 +157,6 @@ class _LyricsTopBar extends StatelessWidget {
               fontSize: 12,
               color: Colors.white.withValues(alpha: 0.45),
             ),
-          ),
-          const Spacer(),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: false, label: Text('滚动')),
-              ButtonSegment(value: true, label: Text('逐字')),
-            ],
-            selected: {wordMode},
-            onSelectionChanged: (_) => onToggleMode(),
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          IconButton(
-            onPressed: onAddSong,
-            icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
-            tooltip: '添加歌曲',
           ),
         ],
       ),

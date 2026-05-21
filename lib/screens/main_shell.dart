@@ -90,7 +90,8 @@ class _MainShellState extends ConsumerState<MainShell> {
           ref.read(playerProvider.notifier).seek(Duration(milliseconds: posMs));
           break;
         case 'pause_event':
-          ref.read(playerProvider.notifier).pause();
+          // 播放列表为空时服务端发送此消息，重置播放器为空闲状态
+          ref.read(playerProvider.notifier).stop();
           break;
       }
     });
@@ -153,6 +154,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final tab = ref.watch(sidebarTabProvider);
+    final isInRoom = ref.watch(roomProvider).enteredRoomId != null;
 
     // Stop player when entering a different room
     ref.listen<RoomState>(roomProvider, _onRoomStateChange);
@@ -167,7 +169,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               children: [
                 const IconSidebar(),
                 const Expanded(child: ContentArea()),
-                if (tab == SidebarTab.player) const UserPanel(),
+                if (tab == SidebarTab.player && isInRoom) const UserPanel(),
               ],
             ),
           ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/server_config_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -54,19 +53,6 @@ class SettingsScreen extends ConsumerWidget {
                           color: Colors.white.withValues(alpha: 0.45))),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-              ),
-              onPressed: () => ref.read(authProvider.notifier).logout(),
-              child: const Text('退出登录',
-                  style: TextStyle(color: Colors.redAccent)),
             ),
           ),
         ],

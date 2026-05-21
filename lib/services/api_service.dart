@@ -173,6 +173,19 @@ class ApiService {
     }
   }
 
+  Future<void> exitRoom({
+    required int roomId,
+    required String userUuid,
+  }) async {
+    final data = _parse(await _client.post('/api/exit_room', data: {
+      'room_id': roomId,
+      'user_uuid': userUuid,
+    }));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '退出房间失败');
+    }
+  }
+
   Future<RoomDetail> fetchRoom(int roomId) async {
     final data = _parse(await _client.post('/api/fetch_room', data: {
       'room_id': roomId,

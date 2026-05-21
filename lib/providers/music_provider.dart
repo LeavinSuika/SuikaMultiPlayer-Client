@@ -182,7 +182,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
     _completedSub = _player.stream.completed.listen((_) {
       state = state.copyWith(
-          status: PlayerStatus.idle, position: Duration.zero);
+          status: PlayerStatus.idle, position: Duration.zero, currentTrack: null);
     });
 
     _errorSub = _player.stream.error.listen((e) {
@@ -277,11 +277,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     _readyCompleter = null;
     try {
       await _player.stop();
-      state = state.copyWith(
-          status: PlayerStatus.idle,
-          position: Duration.zero,
-          currentTrack: null);
     } catch (_) {}
+    state = state.copyWith(
+        status: PlayerStatus.idle,
+        position: Duration.zero,
+        currentTrack: null);
   }
 
   /// 仅供外部同步使用（main_shell pause/resume 消息）
@@ -301,7 +301,15 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     }
   }
 
+  /// 本地 seek，不通知服务器（用于接收服务器 seek 消息或拖动过程中）
   void seek(Duration pos) {
+    _player.seek(pos);
+    state = state.copyWith(position: pos);
+    _lastSeekTime = DateTime.now();
+  }
+
+  /// 本地 seek 并同步到服务器（仅在拖动结束时调用）
+  void seekAndSync(Duration pos) {
     _player.seek(pos);
     state = state.copyWith(position: pos);
     _lastSeekTime = DateTime.now();

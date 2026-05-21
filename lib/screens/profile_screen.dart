@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
+import 'package:suika_multi_player/screens/login_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -89,7 +90,16 @@ class ProfileScreen extends ConsumerWidget {
           _ActionButton(
             icon: Icons.logout_rounded,
             label: '退出登录',
-            onTap: () => ref.read(authProvider.notifier).logout(),
+            onTap: () async {
+              await ref.read(authProvider.notifier).logout();
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (_) => false,
+                );
+              }
+            },
             isDestructive: true,
           ),
         ],
