@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:suika_multi_player/config/api_config.dart';
+import 'package:suika_multi_player/utils/log_buffer.dart';
 
 enum WsConnectionState { disconnected, connecting, connected }
 
@@ -32,6 +33,7 @@ class GlobalWebsocketService {
   void connect(String userUuid) {
     _state = WsConnectionState.connecting;
     _connectionStateController.add(_state);
+    LogBuffer.instance.info('GlobalWS', 'Connecting (user: $userUuid)');
 
     final uri = Uri.parse('${ApiConfig.globalWsUrl}?user_uuid=$userUuid');
 
@@ -40,6 +42,7 @@ class GlobalWebsocketService {
       _state = WsConnectionState.connected;
       _connectionStateController.add(_state);
       _startPing();
+      LogBuffer.instance.info('GlobalWS', 'Connected');
 
       _channel!.stream.listen(
         (data) {
@@ -53,7 +56,8 @@ class GlobalWebsocketService {
         onError: (_) => _onDisconnected(),
         onDone: () => _onDisconnected(),
       );
-    } catch (_) {
+    } catch (e) {
+      LogBuffer.instance.error('GlobalWS', 'Connect failed: $e');
       _onDisconnected();
     }
   }
@@ -131,6 +135,7 @@ class WebsocketService {
     if (_userUuid == null || _roomId == null) return;
     final gen = ++_generation;
     _setState(WsConnectionState.connecting);
+    LogBuffer.instance.info('WS', 'Connecting to room $_roomId');
 
     final uri = Uri.parse(
         '${ApiConfig.wsBaseUrl}/ws/room/$_roomId?user_uuid=$_userUuid');
@@ -140,19 +145,22 @@ class WebsocketService {
       _setState(WsConnectionState.connected);
       _reconnectAttempt = 0;
       _startPing();
+      LogBuffer.instance.info('WS', 'Connected to room $_roomId');
 
       _channel!.stream.listen(
         (data) {
           try {
             final json = jsonDecode(data as String) as Map<String, dynamic>;
             final type = json['type'] as String? ?? '';
+            LogBuffer.instance.info('WS', 'Received: $type');
             _messageController.add(WebSocketMessage(type: type, data: json));
           } catch (_) {}
         },
         onError: (_) => _handleDisconnect(gen),
         onDone: () => _handleDisconnect(gen),
       );
-    } catch (_) {
+    } catch (e) {
+      LogBuffer.instance.error('WS', 'Connect failed: $e');
       _handleDisconnect(gen);
     }
   }

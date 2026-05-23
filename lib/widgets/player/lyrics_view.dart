@@ -8,6 +8,7 @@ import 'package:suika_multi_player/models/track.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/music_provider.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
+import 'package:suika_multi_player/utils/log_buffer.dart';
 
 // ============================================================
 // 常量
@@ -416,6 +417,7 @@ class _BackgroundLayer extends StatelessWidget {
     if (coverUrl == null || coverUrl!.isEmpty) {
       return Container(color: const Color(0xFF0D0D0D));
     }
+    LogBuffer.instance.info('IMG', 'Load bg: ${coverUrl!.length > 80 ? '${coverUrl!.substring(0, 80)}...' : coverUrl!}');
     return Positioned.fill(
       child: Stack(
         fit: StackFit.expand,
@@ -426,8 +428,10 @@ class _BackgroundLayer extends StatelessWidget {
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
-            errorBuilder: (_, __, ___) =>
-                Container(color: const Color(0xFF0D0D0D)),
+            errorBuilder: (_, e, __) {
+              LogBuffer.instance.error('IMG', 'Bg load failed: $e');
+              return Container(color: const Color(0xFF0D0D0D));
+            },
           ),
           // 模糊 + 暗色遮罩
           ClipRect(
@@ -479,6 +483,7 @@ class _AlbumArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    LogBuffer.instance.info('IMG', 'Load cover: ${coverUrl.length > 80 ? '${coverUrl.substring(0, 80)}...' : coverUrl}');
     return SizedBox(
       width: size,
       height: size,
@@ -536,15 +541,18 @@ class _AlbumArt extends StatelessWidget {
                   ],
                 );
               },
-              errorBuilder: (_, __, ___) => Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: const Color(0xFF2A2A2A),
-                ),
-                child: Icon(Icons.music_note_rounded,
-                    size: size * 0.4,
-                    color: Colors.white.withValues(alpha: 0.2)),
-              ),
+              errorBuilder: (_, e, __) {
+                LogBuffer.instance.error('IMG', 'Cover load failed: $e');
+                return Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFF2A2A2A),
+                  ),
+                  child: Icon(Icons.music_note_rounded,
+                      size: size * 0.4,
+                      color: Colors.white.withValues(alpha: 0.2)),
+                );
+              },
             ),
           ),
         ],

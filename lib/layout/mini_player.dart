@@ -1,10 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:suika_multi_player/models/room.dart';
 import 'package:suika_multi_player/models/track.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/music_provider.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
+import 'package:suika_multi_player/providers/user_cache_provider.dart';
 import 'package:suika_multi_player/providers/websocket_provider.dart';
 import 'package:suika_multi_player/providers/sidebar_provider.dart';
 
@@ -25,7 +27,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
       return;
     }
     final cache = ref.read(trackCacheProvider.notifier);
-    final firstId = room.playlist.first;
+    final firstId = room.playlist.first.trackId;
     cache.fetchIfNeeded(firstId).then((_) {
       final track = ref.read(trackCacheProvider)[firstId] ?? Track(id: firstId, name: firstId, artist: '');
       ref.read(playerProvider.notifier).playTrack(track);
@@ -385,7 +387,7 @@ class _ExitButton extends ConsumerWidget {
 }
 
 class _PlaylistSheet extends ConsumerWidget {
-  final List<String> playlist;
+  final List<PlaylistEntry> playlist;
   const _PlaylistSheet({required this.playlist});
 
   @override
@@ -411,7 +413,7 @@ class _PlaylistSheet extends ConsumerWidget {
                 ? Center(child: Text('歌单为空', style: TextStyle(color: Colors.white.withValues(alpha: 0.4))))
                 : ListView.builder(
                     itemCount: playlist.length,
-                    itemBuilder: (_, i) => _PlaylistTile(trackId: playlist[i], index: i),
+                    itemBuilder: (_, i) => _PlaylistTile(entry: playlist[i], index: i),
                   ),
           ),
         ],
@@ -421,18 +423,27 @@ class _PlaylistSheet extends ConsumerWidget {
 }
 
 class _PlaylistTile extends ConsumerWidget {
-  final String trackId;
+  final PlaylistEntry entry;
   final int index;
-  const _PlaylistTile({required this.trackId, required this.index});
+  const _PlaylistTile({required this.entry, required this.index});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cache = ref.watch(trackCacheProvider);
     final player = ref.watch(playerProvider);
-    final track = cache[trackId];
-    final isCurrent = player.currentTrack?.id == trackId;
+    final track = cache[entry.trackId];
+    final isCurrent = player.currentTrack?.id == entry.trackId;
 
-    ref.read(trackCacheProvider.notifier).fetchIfNeeded(trackId);
+    ref.read(trackCacheProvider.notifier).fetchIfNeeded(entry.trackId);
+
+    // 查找添加者昵称
+    String? addedByName;
+    if (entry.addedBy != null && entry.addedBy!.isNotEmpty) {
+      ref.read(userCacheProvider.notifier).fetchUser(entry.addedBy!);
+      final uc = ref.watch(userCacheProvider);
+      final u = uc[entry.addedBy];
+      addedByName = u?.nickname ?? u?.userName;
+    }
 
     return ListTile(
       leading: CircleAvatar(
@@ -442,16 +453,20 @@ class _PlaylistTile extends ConsumerWidget {
             : Text('${index + 1}', style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.6))),
       ),
       title: Text(
-        track != null ? '${track.name} - ${track.artist}' : trackId,
+        track != null ? '${track.name} - ${track.artist}' : entry.trackId,
         style: TextStyle(fontSize: 13, color: isCurrent ? Colors.white : Colors.white.withValues(alpha: 0.6)),
       ),
+      subtitle: addedByName != null
+          ? Text('由 $addedByName 添加',
+              style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.3)))
+          : null,
       onTap: () {
-        final t = track ?? Track(id: trackId, name: trackId, artist: '');
+        final t = track ?? Track(id: entry.trackId, name: entry.trackId, artist: '');
         ref.read(playerProvider.notifier).playTrack(t);
       },
       trailing: IconButton(
         icon: Icon(Icons.remove_circle_outline, size: 18, color: Colors.white.withValues(alpha: 0.3)),
-        onPressed: () => ref.read(websocketProvider).sendPlaylistRemove([trackId]),
+        onPressed: () => ref.read(websocketProvider).sendPlaylistRemove([entry.trackId]),
       ),
     );
   }

@@ -1,18 +1,30 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/screens/login_screen.dart';
+import 'package:suika_multi_player/utils/center_toast.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  bool _uploading = false;
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final user = auth.user;
     final theme = Theme.of(context);
 
     if (user == null) return const SizedBox.shrink();
+
+    final hasAvatar =
+        user.avatarUrl != null && user.avatarUrl!.isNotEmpty;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
@@ -20,29 +32,40 @@ class ProfileScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 16),
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  theme.colorScheme.primary,
-                  theme.colorScheme.tertiary,
+          // 头像
+          GestureDetector(
+            onTap: _uploading ? null : () => _changeAvatar(),
+            child: Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: hasAvatar
+                    ? null
+                    : LinearGradient(
+                        colors: [
+                          theme.colorScheme.primary,
+                          theme.colorScheme.tertiary,
+                        ],
+                      ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
                 ],
               ),
-            ),
-            child: Center(
-              child: Text(
-                user.nickname.isNotEmpty
-                    ? user.nickname[0].toUpperCase()
-                    : user.userName[0].toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
+              child: hasAvatar
+                  ? ClipOval(
+                      child: Image.network(
+                        user.avatarUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            _buildInitials(user.nickname, user.userName),
+                      ),
+                    )
+                  : _buildInitials(user.nickname, user.userName),
             ),
           ),
           const SizedBox(height: 16),
@@ -72,9 +95,17 @@ class ProfileScreen extends ConsumerWidget {
           _InfoCard(
             title: '角色',
             value: user.isAdmin ? '管理员' : '普通用户',
-            icon: user.isAdmin ? Icons.admin_panel_settings_rounded : Icons.person_rounded,
+            icon: user.isAdmin
+                ? Icons.admin_panel_settings_rounded
+                : Icons.person_rounded,
           ),
           const SizedBox(height: 24),
+          _ActionButton(
+            icon: Icons.camera_alt_rounded,
+            label: '更换头像',
+            onTap: _uploading ? null : () => _changeAvatar(),
+          ),
+          const SizedBox(height: 12),
           _ActionButton(
             icon: Icons.edit_rounded,
             label: '修改昵称',
@@ -107,6 +138,68 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildInitials(String nickname, String userName) {
+    final letter = nickname.isNotEmpty
+        ? nickname[0].toUpperCase()
+        : userName[0].toUpperCase();
+    return Center(
+      child: Text(
+        letter,
+        style: const TextStyle(
+          fontSize: 36,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _changeAvatar() async {
+    final user = ref.read(authProvider).user;
+    if (user == null) return;
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      if (file.path == null) return;
+
+      setState(() => _uploading = true);
+
+      final api = ref.read(apiServiceProvider);
+      final upload = await api.uploadImage(file.path!);
+      final imageId = upload['image_id'] as String;
+      final url = upload['url'] as String;
+
+      await api.updateAvatar(
+        userUuid: user.userUuid,
+        avatarUrl: url,
+        avatarKey: imageId,
+      );
+
+      await ref.read(authProvider.notifier).refreshUser();
+
+      if (mounted) {
+        showCenterToast(context, message: '头像已更新');
+      }
+    } catch (e) {
+      if (mounted) {
+        showCenterToast(
+          context,
+          message: '上传失败: $e',
+          backgroundColor: Colors.redAccent.withValues(alpha: 0.85),
+          duration: const Duration(seconds: 3),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
   void _showEditNickname(BuildContext context, WidgetRef ref) {
     final ctrl = TextEditingController();
     showDialog(
@@ -119,7 +212,9 @@ class ProfileScreen extends ConsumerWidget {
           decoration: const InputDecoration(hintText: '新昵称 (最多20字)'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消')),
           ElevatedButton(
             onPressed: () async {
               final name = ctrl.text.trim();
@@ -165,7 +260,9 @@ class ProfileScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消')),
           ElevatedButton(
             onPressed: () async {
               final user = ref.read(authProvider).user;
@@ -225,7 +322,7 @@ class _InfoCard extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool isDestructive;
 
   const _ActionButton({

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
+import 'package:suika_multi_player/models/room.dart';
 import 'package:suika_multi_player/providers/music_provider.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/sidebar_provider.dart';
 import 'package:suika_multi_player/models/track.dart';
 import 'package:suika_multi_player/providers/websocket_provider.dart';
+import 'package:suika_multi_player/utils/center_toast.dart';
+import 'package:suika_multi_player/widgets/room/room_settings_dialog.dart';
 
 class IconSidebar extends ConsumerWidget {
   const IconSidebar({super.key});
@@ -70,6 +73,7 @@ class IconSidebar extends ConsumerWidget {
                       isEntered: isEntered,
                       isPreviewed: isPreviewed,
                       exitedRoomId: exitedRoomId,
+                      isOwner: room.creatorUuid == (user?.userUuid ?? ''),
                       onTap: () {
                         ref.read(roomProvider.notifier).previewRoom(room.roomId);
                         ref.read(sidebarTabProvider.notifier).state = SidebarTab.player;
@@ -78,6 +82,27 @@ class IconSidebar extends ConsumerWidget {
                         ref.read(playerProvider.notifier).stop();
                         ref.read(roomProvider.notifier).switchRoom(room, user?.userUuid ?? '');
                         ref.read(sidebarTabProvider.notifier).state = SidebarTab.player;
+                      },
+                      onLeave: () async {
+                        final uid = user?.userUuid ?? '';
+                        final err = await ref.read(roomProvider.notifier).leaveRoom(uid);
+                        if (err != null && context.mounted) {
+                          showCenterToast(context,
+                            message: err,
+                            backgroundColor: Colors.redAccent.withValues(alpha: 0.85),
+                            duration: const Duration(seconds: 3),
+                          );
+                        }
+                      },
+                      onSettings: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => RoomSettingsDialog(
+                            roomId: room.roomId,
+                            roomName: room.name,
+                            ownerUuid: room.creatorUuid,
+                          ),
+                        );
                       },
                     );
                   }),
@@ -138,8 +163,11 @@ class _RoomIcon extends StatefulWidget {
   final bool isEntered;
   final bool isPreviewed;
   final int? exitedRoomId;
+  final bool isOwner;
   final VoidCallback onTap;
   final VoidCallback? onDoubleTap;
+  final VoidCallback? onLeave;
+  final VoidCallback? onSettings;
 
   const _RoomIcon({
     required this.name,
@@ -147,8 +175,11 @@ class _RoomIcon extends StatefulWidget {
     required this.isEntered,
     required this.isPreviewed,
     required this.exitedRoomId,
+    required this.isOwner,
     required this.onTap,
     this.onDoubleTap,
+    this.onLeave,
+    this.onSettings,
   });
 
   @override
@@ -258,8 +289,55 @@ class _RoomIconState extends State<_RoomIcon> with TickerProviderStateMixin {
     return GestureDetector(
       onTap: widget.onTap,
       onDoubleTap: widget.onDoubleTap,
+      onSecondaryTapDown: widget.onLeave != null
+          ? (details) => _showContextMenu(context, details.globalPosition)
+          : null,
       child: Tooltip(message: widget.name, child: icon),
     );
+  }
+
+  void _showContextMenu(BuildContext context, Offset position) {
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
+      color: const Color(0xFF2A2A2A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      items: [
+        if (widget.isOwner)
+          PopupMenuItem(
+            value: 'settings',
+            child: Row(
+              children: [
+                Icon(Icons.settings_rounded, size: 18,
+                    color: Colors.white.withValues(alpha: 0.7)),
+                const SizedBox(width: 10),
+                Text('房间设置',
+                    style: TextStyle(fontSize: 14,
+                        color: Colors.white.withValues(alpha: 0.85))),
+              ],
+            ),
+          ),
+        PopupMenuItem(
+          value: 'leave',
+          child: Row(
+            children: [
+              Icon(Icons.exit_to_app_rounded, size: 18,
+                  color: Colors.redAccent.withValues(alpha: 0.85)),
+              const SizedBox(width: 10),
+              Text('退出房间',
+                  style: TextStyle(fontSize: 14,
+                      color: Colors.white.withValues(alpha: 0.85))),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'leave') {
+        widget.onLeave?.call();
+      } else if (value == 'settings') {
+        widget.onSettings?.call();
+      }
+    });
   }
 }
 
@@ -346,11 +424,9 @@ class _SearchOverlayState extends ConsumerState<_SearchOverlay> {
     ref.read(websocketProvider).sendPlaylistAdd([
       {'track_id': track.id, 'duration': track.durationMs ?? 0}
     ]);
-    final newList = [...room.playlist, track.id];
+    final newList = [...room.playlist, PlaylistEntry(trackId: track.id)];
     ref.read(roomProvider.notifier).updatePlaylist(newList);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已添加: ${track.name}'), duration: const Duration(seconds: 1)),
-    );
+    showCenterToast(context, message: '已添加: ${track.name}');
   }
 
   @override

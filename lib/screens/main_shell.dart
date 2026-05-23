@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:suika_multi_player/models/room.dart';
 import 'package:suika_multi_player/models/track.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/music_provider.dart';
@@ -12,6 +13,7 @@ import 'package:suika_multi_player/layout/icon_sidebar.dart';
 import 'package:suika_multi_player/layout/content_area.dart';
 import 'package:suika_multi_player/layout/user_panel.dart';
 import 'package:suika_multi_player/layout/mini_player.dart';
+import 'package:suika_multi_player/utils/center_toast.dart';
 
 class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
@@ -69,7 +71,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           break;
         case 'playlist_update':
           final newPlaylist = (msg.data['playlist'] as List<dynamic>?)
-                  ?.map((e) => e.toString())
+                  ?.map((e) => PlaylistEntry.fromJson(e))
                   .toList() ?? [];
           room.updatePlaylist(newPlaylist);
           break;
@@ -158,6 +160,17 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     // Stop player when entering a different room
     ref.listen<RoomState>(roomProvider, _onRoomStateChange);
+
+    // 播放出错时居中提示
+    ref.listen<String?>(playerProvider.select((s) => s.error), (_, error) {
+      if (error != null && error.isNotEmpty) {
+        showCenterToast(context,
+          message: '播放失败',
+          backgroundColor: Colors.redAccent.withValues(alpha: 0.85),
+          duration: const Duration(seconds: 4),
+        );
+      }
+    });
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),

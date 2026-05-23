@@ -37,7 +37,7 @@ class Lyrics {
 
   static List<LyricLine> _parseLrc(String text) {
     final lines = <LyricLine>[];
-    final regExp = RegExp(r'\[(\d{2}):(\d{2})\.(\d{2,3})\](.*)');
+    final regExp = RegExp(r'\[(\d{2}):(\d{2})[\.:](\d{2,3})\](.*)');
 
     for (final line in text.split('\n')) {
       final match = regExp.firstMatch(line.trim());

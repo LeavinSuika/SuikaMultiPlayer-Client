@@ -13,7 +13,7 @@ class RoomState {
   final Map<int, Room> roomCache;
   final List<int> joinedRoomIds;
   final List<String> onlineUsers;
-  final List<String> playlist;
+  final List<PlaylistEntry> playlist;
   final String? ownerUuid;
 
   const RoomState({
@@ -24,7 +24,7 @@ class RoomState {
     this.roomCache = const {},
     this.joinedRoomIds = const [],
     this.onlineUsers = const [],
-    this.playlist = const [],
+    this.playlist = const <PlaylistEntry>[],
     this.ownerUuid,
   });
 
@@ -38,7 +38,7 @@ class RoomState {
     Map<int, Room>? roomCache,
     List<int>? joinedRoomIds,
     List<String>? onlineUsers,
-    List<String>? playlist,
+    List<PlaylistEntry>? playlist,
     Object? ownerUuid = _sentinel,
   }) =>
       RoomState(
@@ -151,10 +151,10 @@ class RoomNotifier extends StateNotifier<RoomState> {
   Future<String?> exitRoom(String userUuid) async {
     if (state.currentRoom == null) return null;
     final roomId = state.currentRoom!.roomId;
-    _ws.disconnect();
     try {
       await _api.exitRoom(roomId: roomId, userUuid: userUuid);
     } catch (_) {}
+    _ws.disconnect();
     state = state.copyWith(
       currentRoom: null,
       enteredRoomId: null,
@@ -168,21 +168,15 @@ class RoomNotifier extends StateNotifier<RoomState> {
   Future<String?> leaveRoom(String userUuid) async {
     if (state.currentRoom == null) return null;
     final roomId = state.currentRoom!.roomId;
-    _ws.disconnect();
     try {
       await _api.leaveRoom(roomId: roomId, userUuid: userUuid);
-      // API succeeded — permanently remove from joined rooms
+      // API succeeded — 断开连接并移除
+      _ws.disconnect();
       final jids = state.joinedRoomIds.where((id) => id != roomId).toList();
       state = RoomState(roomCache: state.roomCache, joinedRoomIds: jids);
       return null;
     } catch (e) {
-      // API failed (e.g. owner can't leave) — keep membership, just disconnect locally
-      state = state.copyWith(
-        currentRoom: null,
-        enteredRoomId: null,
-        onlineUsers: const [],
-        playlist: const [],
-      );
+      // API 失败 — 保持房间连接和状态不变
       return e.toString().replaceFirst('Exception: ', '');
     }
   }
@@ -219,13 +213,15 @@ class RoomNotifier extends StateNotifier<RoomState> {
   }
 
   void updateRoomInfo(Map<String, dynamic> data) {
-    final playlist = (data['playlist'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [];
+    final playlist = (data['playlist'] as List<dynamic>?)
+        ?.map((e) => PlaylistEntry.fromJson(e))
+        .toList() ?? [];
     final owner = data['owner'] as String?;
     state = state.copyWith(playlist: playlist, ownerUuid: owner);
   }
 
   void updateOnlineUsers(List<String> users) => state = state.copyWith(onlineUsers: users);
-  void updatePlaylist(List<String> playlist) => state = state.copyWith(playlist: playlist);
+  void updatePlaylist(List<PlaylistEntry> playlist) => state = state.copyWith(playlist: playlist);
   void addUser(String userUuid) {
     if (!state.onlineUsers.contains(userUuid)) {
       state = state.copyWith(onlineUsers: [...state.onlineUsers, userUuid]);

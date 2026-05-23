@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/user_cache_provider.dart';
+import 'package:suika_multi_player/widgets/user_avatar.dart';
 
 class UserPanel extends ConsumerWidget {
   const UserPanel({super.key});
@@ -135,10 +136,11 @@ class _UserTile extends ConsumerWidget {
           children: [
             Stack(
               children: [
-                CircleAvatar(
+                UserAvatar(
+                  avatarUrl: user?.avatarUrl,
+                  fallback: firstLetter,
                   radius: 14,
                   backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Text(firstLetter, style: const TextStyle(fontSize: 11, color: Colors.white)),
                 ),
                 Positioned(
                   right: 0, bottom: 0,

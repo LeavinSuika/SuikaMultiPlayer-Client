@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:suika_multi_player/config/api_config.dart';
@@ -231,6 +233,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _showServer = false;
   bool _loading = false;
   String? _error;
+  String? _avatarPath;         // 本地图片路径（预览用）
+  String? _avatarImageId;      // 上传后的 image_id
+  String? _avatarUrl;          // 上传后的 URL
 
   @override
   void dispose() {
@@ -242,6 +247,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  Future<void> _pickAvatar() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final path = result.files.first.path;
+    if (path == null) return;
+    setState(() {
+      _avatarPath = path;
+      _avatarImageId = null;
+      _avatarUrl = null;
+    });
+  }
+
   Future<void> _doRegister() async {
     if (!_formKey.currentState!.validate()) return;
     if (_loading) return;
@@ -251,6 +271,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
     try {
       final dio = _createDio();
+      final baseUrl = dio.options.baseUrl;
+
+      // 如果选择了头像，先上传
+      if (_avatarPath != null && _avatarImageId == null) {
+        final filename = _avatarPath!.split('/').last.split('\\').last;
+        final formData = FormData.fromMap({
+          'file': await MultipartFile.fromFile(_avatarPath!, filename: filename),
+        });
+        final uploadResp = await dio.post('$baseUrl/api/upload_image', data: formData);
+        final uploadData = uploadResp.data is Map
+            ? uploadResp.data as Map<String, dynamic>
+            : uploadResp.data;
+        if (uploadData is Map && uploadData['success'] == true) {
+          _avatarImageId = uploadData['image_id'] as String;
+          _avatarUrl = uploadData['url'] as String;
+        }
+      }
+
+      // 注册
       final resp = await dio.post('/api/register', data: {
         'user_name': _userNameCtrl.text.trim(),
         'pwd': _pwdCtrl.text,
@@ -265,8 +304,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
         return;
       }
+      final userUuid = data['user_uuid'] as String;
+
+      // 如果上传了头像，注册后更新头像
+      if (_avatarImageId != null && _avatarUrl != null) {
+        try {
+          await dio.post('/api/update_avatar', data: {
+            'user_uuid': userUuid,
+            'avatar_url': _avatarUrl,
+            'avatar_key': _avatarImageId,
+          });
+        } catch (_) {}
+      }
+
       await SharedPreferences.getInstance().then((prefs) {
-        prefs.setString('user_uuid', data['user_uuid'] as String);
+        prefs.setString('user_uuid', userUuid);
       });
       if (!mounted) return;
       Navigator.pushReplacement(
@@ -327,7 +379,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Center(child: const Icon(Icons.music_note_rounded, size: 48, color: Colors.white)),
                 const SizedBox(height: 16),
                 Text('创建账号', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white.withValues(alpha: 0.95))),
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
+                // 头像选择
+                Center(
+                  child: GestureDetector(
+                    onTap: _loading ? null : _pickAvatar,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: _avatarPath == null
+                            ? const LinearGradient(colors: [Colors.white, Color(0xFF9E9E9E)])
+                            : null,
+                      ),
+                      child: _avatarPath != null
+                          ? ClipOval(
+                              child: Image.file(
+                                File(_avatarPath!),
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : const Center(
+                              child: Icon(Icons.camera_alt_rounded,
+                                  size: 28, color: Color(0xFF1A1A1A)),
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Center(
+                  child: TextButton(
+                    onPressed: _loading ? null : _pickAvatar,
+                    child: Text(
+                      _avatarPath != null ? '更换头像' : '选择头像（可选）',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.4)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 Form(
                   key: _formKey,
                   child: Column(

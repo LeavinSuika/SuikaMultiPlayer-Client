@@ -96,6 +96,20 @@ class ApiService {
     }
   }
 
+  /// 上传图片到图床，返回 {image_id, url}
+  Future<Map<String, dynamic>> uploadImage(String filePath) async {
+    final filename = filePath.split('/').last.split('\\').last;
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: filename),
+    });
+    final resp = await _client.post('/api/upload_image', data: formData);
+    final data = _parse(resp);
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '上传图片失败');
+    }
+    return data;
+  }
+
   Future<void> updateAvatar({
     required String userUuid,
     required String avatarUrl,
@@ -250,6 +264,38 @@ class ApiService {
     }));
     if (data['success'] != true) {
       throw Exception(data['message'] ?? '转让失败');
+    }
+  }
+
+  Future<void> setRoomMemberRole({
+    required String operatorUuid,
+    required int roomId,
+    required String userUuid,
+    required String role,
+  }) async {
+    final data = _parse(await _client.post('/api/set_room_members_role', data: {
+      'operator_uuid': operatorUuid,
+      'room_id': roomId,
+      'user_uuid': userUuid,
+      'role': role,
+    }));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '设置角色失败');
+    }
+  }
+
+  Future<void> kickRoomMember({
+    required String operatorUuid,
+    required int roomId,
+    required String userUuid,
+  }) async {
+    final data = _parse(await _client.post('/api/kick_room_member', data: {
+      'operator_uuid': operatorUuid,
+      'room_id': roomId,
+      'user_uuid': userUuid,
+    }));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '踢出成员失败');
     }
   }
 

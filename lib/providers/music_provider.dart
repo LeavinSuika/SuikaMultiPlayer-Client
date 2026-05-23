@@ -103,7 +103,7 @@ class PlayerState {
     this.error,
     this.position = Duration.zero,
     this.duration = Duration.zero,
-    this.volume = 1.0,
+    this.volume = 0.25,
   });
   PlayerState copyWith({
     PlayerStatus? status,
@@ -143,6 +143,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   bool _hasStartedPlaying = false;
 
   void _init() {
+    _player.setVolume(25);  // 初始音量 25%
     _playingSub = _player.stream.playing.listen((playing) {
       if (playing) {
         _hasStartedPlaying = true;

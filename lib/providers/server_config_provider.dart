@@ -36,8 +36,8 @@ final serverConfigProvider =
   final savedPortStr = storage.getString('server_port');
   final host = (savedHost != null && savedHost.isNotEmpty)
       ? savedHost
-      : '127.0.0.1';
-  final port = int.tryParse(savedPortStr ?? '') ?? 8001;
+      : ApiConfig.host;
+  final port = int.tryParse(savedPortStr ?? '') ?? ApiConfig.port;
   ApiConfig.host = host;
   ApiConfig.port = port;
   return ServerConfigNotifier(storage, ServerConfig(host: host, port: port));

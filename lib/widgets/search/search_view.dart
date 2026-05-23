@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:suika_multi_player/models/room.dart';
 import 'package:suika_multi_player/models/track.dart';
 import 'package:suika_multi_player/providers/music_provider.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/websocket_provider.dart';
+import 'package:suika_multi_player/utils/center_toast.dart';
 
 class SearchView extends ConsumerStatefulWidget {
   const SearchView({super.key});
@@ -24,20 +26,16 @@ class _SearchViewState extends ConsumerState<SearchView> {
   void _addTrack(Track track) {
     final room = ref.read(roomProvider);
     if (room.currentRoom == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先加入或创建房间')),
-      );
+      showCenterToast(context, message: '请先加入或创建房间');
       return;
     }
     ref.read(trackCacheProvider.notifier).cache(track);
     ref.read(websocketProvider).sendPlaylistAdd([
       {'track_id': track.id, 'duration': track.durationMs ?? 0}
     ]);
-    final newList = [...room.playlist, track.id];
+    final newList = [...room.playlist, PlaylistEntry(trackId: track.id)];
     ref.read(roomProvider.notifier).updatePlaylist(newList);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已添加: ${track.name}'), duration: const Duration(seconds: 1)),
-    );
+    showCenterToast(context, message: '已添加: ${track.name}');
   }
 
   @override

@@ -1,3 +1,28 @@
+class PlaylistEntry {
+  final String trackId;
+  final String? addedBy;
+
+  const PlaylistEntry({required this.trackId, this.addedBy});
+
+  factory PlaylistEntry.fromJson(dynamic data) {
+    if (data is String) return PlaylistEntry(trackId: data);
+    if (data is Map<String, dynamic>) {
+      return PlaylistEntry(
+        trackId: data['track_id'] as String? ?? '',
+        addedBy: data['added_by'] as String?,
+      );
+    }
+    return const PlaylistEntry(trackId: '');
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlaylistEntry && other.trackId == trackId;
+
+  @override
+  int get hashCode => trackId.hashCode;
+}
+
 class Room {
   final int roomId;
   final String name;
@@ -31,14 +56,30 @@ class Room {
       };
 }
 
+class RoomMember {
+  final String userUuid;
+  final String role;
+
+  const RoomMember({required this.userUuid, required this.role});
+
+  factory RoomMember.fromJson(Map<String, dynamic> json) => RoomMember(
+        userUuid: json['user_uuid'] as String,
+        role: json['role'] as String? ?? 'member',
+      );
+
+  bool get isOwner => role == 'owner';
+  bool get isAdmin => role == 'admin';
+}
+
 class RoomDetail {
   final int roomId;
   final String roomName;
   final String creatorUuid;
   final bool isPublic;
   final List<String> roomMembers;
+  final List<RoomMember> roomMembersDetail;
   final int count;
-  final List<String> playlist;
+  final List<PlaylistEntry> playlist;
   final Map<String, dynamic>? playstatus;
 
   const RoomDetail({
@@ -47,8 +88,9 @@ class RoomDetail {
     required this.creatorUuid,
     required this.isPublic,
     required this.roomMembers,
+    this.roomMembersDetail = const [],
     required this.count,
-    this.playlist = const [],
+    this.playlist = const <PlaylistEntry>[],
     this.playstatus,
   });
 
@@ -61,11 +103,23 @@ class RoomDetail {
                 ?.map((e) => e.toString())
                 .toList() ??
             [],
+        roomMembersDetail: (json['room_members_detail'] as List<dynamic>?)
+                ?.map((e) => RoomMember.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
         count: json['count'] as int? ?? 0,
         playlist: (json['playlist'] as List<dynamic>?)
-                ?.map((e) => e.toString())
+                ?.map((e) => PlaylistEntry.fromJson(e))
                 .toList() ??
             [],
         playstatus: json['playstatus'] as Map<String, dynamic>?,
       );
+
+  RoomMember? getMember(String uuid) {
+    try {
+      return roomMembersDetail.firstWhere((m) => m.userUuid == uuid);
+    } catch (_) {
+      return null;
+    }
+  }
 }

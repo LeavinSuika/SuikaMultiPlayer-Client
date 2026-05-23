@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
+import 'package:suika_multi_player/widgets/user_avatar.dart';
 
 class Toolbar extends ConsumerWidget implements PreferredSizeWidget {
   const Toolbar({super.key});
@@ -32,10 +33,10 @@ class Toolbar extends ConsumerWidget implements PreferredSizeWidget {
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
             const SizedBox(width: 24),
             if (user != null) ...[
-              CircleAvatar(
-                radius: 12, backgroundColor: theme.colorScheme.primaryContainer,
-                child: Text(user.nickname.isNotEmpty ? user.nickname[0].toUpperCase() : 'U',
-                    style: const TextStyle(fontSize: 10, color: Colors.white)),
+              UserAvatar(
+                avatarUrl: user.avatarUrl,
+                fallback: user.nickname.isNotEmpty ? user.nickname[0].toUpperCase() : 'U',
+                radius: 12,
               ),
               const SizedBox(width: 8),
               Text(user.nickname.isNotEmpty ? user.nickname : user.userName,

@@ -1,6 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:suika_multi_player/providers/server_config_provider.dart';
+import 'package:suika_multi_player/utils/log_buffer.dart';
+
+Future<void> _exportLog(BuildContext context) async {
+  try {
+    final path = await LogBuffer.instance.saveToFile();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('日志已导出到 $path'),
+        duration: const Duration(seconds: 4),
+      ));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('导出失败: $e'),
+        duration: const Duration(seconds: 4),
+      ));
+    }
+  }
+}
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -32,6 +52,39 @@ class SettingsScreen extends ConsumerWidget {
             onUpdate: (host, port) {
               ref.read(serverConfigProvider.notifier).update(host, port);
             },
+          ),
+          const SizedBox(height: 24),
+          _SectionTitle('调试'),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('导出运行日志',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.9))),
+                  const SizedBox(height: 4),
+                  Text(
+                    '包含 HTTP 请求、WebSocket 消息等调试信息，导出到程序运行目录',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.4)),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _exportLog(context),
+                      icon: const Icon(Icons.bug_report_rounded, size: 16),
+                      label: const Text('导出日志'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 24),
           _SectionTitle('关于'),
