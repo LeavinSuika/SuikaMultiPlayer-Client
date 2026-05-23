@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:suika_multi_player/config/api_config.dart';
 import 'package:suika_multi_player/screens/main_shell.dart';
+import 'package:suika_multi_player/widgets/crop_avatar_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -255,8 +256,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (result == null || result.files.isEmpty) return;
     final path = result.files.first.path;
     if (path == null) return;
+
+    // 1:1 裁切
+    final croppedPath = await CropAvatarDialog.show(context, path);
+    if (croppedPath == null || !mounted) return;
+
     setState(() {
-      _avatarPath = path;
+      _avatarPath = croppedPath;
       _avatarImageId = null;
       _avatarUrl = null;
     });

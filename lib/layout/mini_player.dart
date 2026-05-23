@@ -251,7 +251,7 @@ class _VolumeButtonState extends ConsumerState<_VolumeButton> {
     _overlay = OverlayEntry(
       builder: (ctx) => Positioned(
         left: pos.dx + size.width / 2 - 22,
-        top: pos.dy - 110,
+        top: pos.dy - 148,
         child: MouseRegion(
           onEnter: (_) => setState(() => _hoveringSlider = true),
           onExit: (_) {
@@ -262,11 +262,11 @@ class _VolumeButtonState extends ConsumerState<_VolumeButton> {
             color: Colors.transparent,
             child: Container(
               width: 44,
-              height: 110,
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              height: 148,
+              padding: const EdgeInsets.symmetric(vertical: 23),
               decoration: BoxDecoration(
                 color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(28),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
               ),
               child: _VolumeSlider(),
@@ -325,19 +325,88 @@ class _VolumeSlider extends ConsumerWidget {
     return RotatedBox(
       quarterTurns: -1,
       child: SliderTheme(
-        data: const SliderThemeData(
-          trackHeight: 4,
-          thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
-          activeTrackColor: Colors.white70,
-          inactiveTrackColor: Colors.white12,
+        data: SliderThemeData(
+          trackHeight: 8,
+          trackShape: _StadiumTrackShape(),
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+          activeTrackColor: Colors.transparent,
+          inactiveTrackColor: Colors.transparent,
           thumbColor: Colors.white,
+          overlayColor: Colors.white.withValues(alpha: 0.1),
         ),
-        child: Slider(
-          value: volume,
-          onChanged: (v) => notifier.volume = v,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 自定义跑道形背景
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _StadiumPainter(volume: volume),
+              ),
+            ),
+            // 透明轨道 + 白色拖钮
+            Slider(
+              value: volume,
+              onChanged: (v) => notifier.volume = v,
+            ),
+          ],
         ),
       ),
     );
+  }
+}
+
+/// 自定义绘制跑道形轨道
+class _StadiumPainter extends CustomPainter {
+  final double volume;
+  _StadiumPainter({required this.volume});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const trackH = 8.0;
+    final trackTop = (size.height - trackH) / 2;
+    final rect = RRect.fromLTRBR(0, trackTop, size.width, trackTop + trackH,
+        const Radius.circular(4));
+    // inactive
+    canvas.drawRRect(rect, Paint()..color = Colors.white12);
+    // active
+    final activeRect = RRect.fromLTRBR(
+        0, trackTop, size.width * volume, trackTop + trackH,
+        const Radius.circular(4));
+    canvas.drawRRect(activeRect, Paint()..color = Colors.white70);
+  }
+
+  @override
+  bool shouldRepaint(_StadiumPainter old) => old.volume != volume;
+}
+
+/// 占位（给 SliderTheme 用，实际绘制由 _StadiumPainter 完成）
+class _StadiumTrackShape extends SliderTrackShape {
+  @override
+  Rect getPreferredRect({
+    required RenderBox parentBox,
+    Offset offset = Offset.zero,
+    required SliderThemeData sliderTheme,
+    bool isEnabled = false,
+    bool isDiscrete = false,
+  }) {
+    final h = sliderTheme.trackHeight ?? 8;
+    final top = offset.dy + (parentBox.size.height - h) / 2;
+    return Rect.fromLTWH(offset.dx, top, parentBox.size.width, h);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+    double additionalActiveTrackHeight = 2,
+  }) {
+    // 什么都不画，由 _StadiumPainter 负责
   }
 }
 

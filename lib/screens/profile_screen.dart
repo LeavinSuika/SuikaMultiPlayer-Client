@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/screens/login_screen.dart';
 import 'package:suika_multi_player/utils/center_toast.dart';
+import 'package:suika_multi_player/widgets/crop_avatar_dialog.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -168,10 +169,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       final file = result.files.first;
       if (file.path == null) return;
 
+      // 1:1 裁切
+      final croppedPath = await CropAvatarDialog.show(context, file.path!);
+      if (croppedPath == null || !mounted) return; // 用户取消
+
       setState(() => _uploading = true);
 
       final api = ref.read(apiServiceProvider);
-      final upload = await api.uploadImage(file.path!);
+      final upload = await api.uploadImage(croppedPath);
       final imageId = upload['image_id'] as String;
       final url = upload['url'] as String;
 
