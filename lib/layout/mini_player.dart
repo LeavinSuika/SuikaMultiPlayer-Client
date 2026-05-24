@@ -230,57 +230,98 @@ class _VolumeButton extends ConsumerStatefulWidget {
   ConsumerState<_VolumeButton> createState() => _VolumeButtonState();
 }
 
-class _VolumeButtonState extends ConsumerState<_VolumeButton> {
+class _VolumeButtonState extends ConsumerState<_VolumeButton>
+    with SingleTickerProviderStateMixin {
   OverlayEntry? _overlay;
   bool _hoveringButton = false;
   bool _hoveringSlider = false;
+  late final AnimationController _animController;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+  }
 
   @override
   void dispose() {
+    _animController.dispose();
     _removeOverlay();
     super.dispose();
   }
 
   void _showOverlay() {
-    if (_overlay != null) return;
+    if (_overlay != null) {
+      if (_animController.status == AnimationStatus.reverse) {
+        _animController.forward();
+      }
+      return;
+    }
     final overlay = Overlay.of(context);
     final renderBox = context.findRenderObject() as RenderBox;
     final pos = renderBox.localToGlobal(Offset.zero);
     final size = renderBox.size;
 
+    const sliderH = 148.0;
     _overlay = OverlayEntry(
       builder: (ctx) => Positioned(
         left: pos.dx + size.width / 2 - 22,
-        top: pos.dy - 148,
-        child: MouseRegion(
-          onEnter: (_) => setState(() => _hoveringSlider = true),
-          onExit: (_) {
-            setState(() => _hoveringSlider = false);
-            _checkHide();
-          },
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: 44,
-              height: 148,
-              padding: const EdgeInsets.symmetric(vertical: 23),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        top: pos.dy - sliderH,
+        child: SizedBox(
+          width: 44,
+          height: sliderH,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _animController,
+              builder: (ctx, child) => Transform.translate(
+                offset: Offset(0, sliderH * (1 - Curves.easeOutCubic.transform(_animController.value))),
+                child: child,
               ),
-              child: _VolumeSlider(),
+              child: MouseRegion(
+                onEnter: (_) => setState(() => _hoveringSlider = true),
+                onExit: (_) {
+                  setState(() => _hoveringSlider = false);
+                  _checkHide();
+                },
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    width: 44,
+                    height: sliderH,
+                    padding: const EdgeInsets.symmetric(vertical: 23),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2A2A2A),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    child: _VolumeSlider(),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
       ),
     );
-    overlay.insert(_overlay!);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_overlay != null) {
+        overlay.insert(_overlay!);
+        _animController.forward();
+      }
+    });
   }
 
   void _removeOverlay() {
-    _overlay?.remove();
-    _overlay = null;
+    if (_overlay == null) return;
+    _animController.reverse().then((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _overlay?.remove();
+        _overlay = null;
+      });
+    });
   }
 
   void _checkHide() {
