@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class AppConstants {
   static const double toolbarHeight = 40;
   static const double iconSidebarWidth = 64;
-  static const double userPanelWidth = 180;
+  static const double userPanelWidth = 210;
   static const double miniPlayerHeight = 64;
 
   static const double cardRadius = 16;

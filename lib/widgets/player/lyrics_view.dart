@@ -18,6 +18,8 @@ const double _kBaseFontSize = 32.0;
 const double _kLineHeight = 1.2;
 const double _kLineSpacing = 38.4; // _kBaseFontSize * 1.2
 const Duration _kScrollResumeTimeout = Duration(milliseconds: 2500);
+const Duration _kAnimBaseDuration = Duration(milliseconds: 400);
+const Curve _kAnimCurve = Curves.easeOutCubic;
 
 // ============================================================
 // 顶层容器
@@ -59,6 +61,7 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
       children: [
         _LyricsTopBar(
           roomName: room.currentRoom!.roomName,
+          roomId: room.currentRoom!.roomId,
           onlineCount: room.onlineUsers.length,
         ),
         const Divider(height: 1),
@@ -154,8 +157,13 @@ class _LyricsViewState extends ConsumerState<LyricsView> {
 
 class _LyricsTopBar extends StatelessWidget {
   final String roomName;
+  final int roomId;
   final int onlineCount;
-  const _LyricsTopBar({required this.roomName, required this.onlineCount});
+  const _LyricsTopBar({
+    required this.roomName,
+    required this.roomId,
+    required this.onlineCount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -166,11 +174,21 @@ class _LyricsTopBar extends StatelessWidget {
           Icon(Icons.music_note_rounded,
               size: 18, color: Colors.white.withValues(alpha: 0.5)),
           const SizedBox(width: 8),
-          Text(roomName,
-              style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.8))),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(roomName,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.8))),
+              Text('ID:$roomId',
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.35))),
+            ],
+          ),
           const SizedBox(width: 8),
           Container(width: 7, height: 7, decoration: const BoxDecoration(
             shape: BoxShape.circle, color: Colors.greenAccent)),
@@ -729,6 +747,9 @@ class _LyricsPanelState extends State<_LyricsPanel> {
   double? _lastWidth;
   bool? _lastShowTranslation;
   Lyrics? _lastLyrics;
+  int _lastFocusedIdx = 0;
+  int _scrollDir = 0;
+  bool _initialLayout = true;
 
   @override
   Widget build(BuildContext context) {
@@ -752,6 +773,9 @@ class _LyricsPanelState extends State<_LyricsPanel> {
           _lastShowTranslation != showTl ||
           _lastLyrics != widget.lyrics) {
         _lineHeightsCache.clear();
+        if (_lastLyrics != widget.lyrics) {
+          _initialLayout = true;
+        }
         _lastWidth = cw;
         _lastShowTranslation = showTl;
         _lastLyrics = widget.lyrics;
@@ -796,6 +820,24 @@ class _LyricsPanelState extends State<_LyricsPanel> {
         final sp = _kLineSpacing * transforms[i - 1].scale;
         transforms[i].top = transforms[i - 1].top + prevScaledH + sp;
       }
+
+      // 交错动画时长 —— 沿滚动方向产生波浪式级联效果
+      _scrollDir = current.compareTo(_lastFocusedIdx);
+      if (!_initialLayout && _scrollDir != 0) {
+        for (int i = 0; i < lines.length; i++) {
+          final offset = i - current;
+          final clamped = (offset * _scrollDir).clamp(-4, 4);
+          final stagger = (clamped + 4) * 40;
+          transforms[i].duration =
+              Duration(milliseconds: 350 + stagger);
+        }
+      } else if (_initialLayout) {
+        for (int i = 0; i < lines.length; i++) {
+          transforms[i].duration = Duration.zero;
+        }
+      }
+      _lastFocusedIdx = current;
+      _initialLayout = false;
 
       return ClipRect(
         child: ShaderMask(
@@ -916,6 +958,8 @@ class _LineTransform {
   double scale = 1;
   double opacity = 1;
   double blur = 0;
+  Duration duration = _kAnimBaseDuration;
+  Curve curve = _kAnimCurve;
 }
 
 // ============================================================
@@ -981,78 +1025,81 @@ class _LyricLineWidgetState extends State<_LyricLineWidget> {
     final useKaraoke =
         widget.useKaraoke && widget.hasKaraoke && widget.line.words != null;
 
-    final content = Opacity(
-      opacity: transform.opacity,
-      child: Transform.scale(
-        scale: transform.scale,
-        alignment: Alignment.centerLeft,
-        child: MouseRegion(
-          onEnter: (_) => setState(() => _hovering = true),
-          onExit: (_) => setState(() => _hovering = false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: widget.onTap,
-            child: Container(
-              key: _sizeKey,
-              decoration: BoxDecoration(
-                color: _hovering
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 6),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (isInterlude)
-                    _InterludeDots(
-                      isCurrent: isCurrent,
-                      isPlaying: widget.isPlaying,
-                      position: widget.position,
-                      line: widget.line,
-                    )
-                  else if (useKaraoke)
-                    _KaraokeWords(
-                      words: widget.line.words!,
-                      lineStart: widget.line.time,
-                      lineIdx: widget.lineIdx,
-                      currentIdx: widget.currentIdx,
-                      position: widget.position,
-                      isCurrent: isCurrent,
-                    )
-                  else
-                    _buildPlainText(isCurrent),
-                  if (widget.showTranslation &&
-                      widget.lyrics.hasTranslation)
-                    _buildTranslation(isCurrent),
-                ],
-              ),
-            ),
+    final innerContent = MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: widget.onTap,
+        child: Container(
+          key: _sizeKey,
+          decoration: BoxDecoration(
+            color: _hovering
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isInterlude)
+                _InterludeDots(
+                  isCurrent: isCurrent,
+                  isPlaying: widget.isPlaying,
+                  position: widget.position,
+                  line: widget.line,
+                )
+              else if (useKaraoke)
+                _KaraokeWords(
+                  words: widget.line.words!,
+                  lineStart: widget.line.time,
+                  lineIdx: widget.lineIdx,
+                  currentIdx: widget.currentIdx,
+                  position: widget.position,
+                  isCurrent: isCurrent,
+                )
+              else
+                _buildPlainText(isCurrent),
+              if (widget.showTranslation &&
+                  widget.lyrics.hasTranslation)
+                _buildTranslation(isCurrent),
+            ],
           ),
         ),
       ),
     );
 
-    if (transform.blur > 0.01) {
-      return Positioned(
-        left: 0,
-        right: 0,
-        top: transform.top,
-        child: ImageFiltered(
-          imageFilter: ui.ImageFilter.blur(
-              sigmaX: transform.blur, sigmaY: transform.blur),
-          child: content,
-        ),
-      );
-    }
+    final animatedContent = AnimatedScale(
+      scale: transform.scale,
+      duration: transform.duration,
+      curve: transform.curve,
+      alignment: Alignment.centerLeft,
+      child: AnimatedOpacity(
+        opacity: transform.opacity,
+        duration: transform.duration,
+        curve: transform.curve,
+        child: innerContent,
+      ),
+    );
 
-    return Positioned(
+    final positionedChild = transform.blur > 0.01
+        ? ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(
+                sigmaX: transform.blur, sigmaY: transform.blur),
+            child: animatedContent,
+          )
+        : animatedContent;
+
+    return AnimatedPositioned(
+      duration: transform.duration,
+      curve: transform.curve,
       left: 0,
       right: 0,
       top: transform.top,
-      child: content,
+      child: positionedChild,
     );
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:suika_multi_player/config/constants.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/user_cache_provider.dart';
@@ -19,7 +20,7 @@ class UserPanel extends ConsumerWidget {
 
     if (members.isEmpty) {
       return Container(
-        width: 180,
+        width: AppConstants.userPanelWidth,
         decoration: BoxDecoration(
           color: theme.colorScheme.surface.withValues(alpha: 0.95),
           border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
@@ -44,7 +45,7 @@ class UserPanel extends ConsumerWidget {
     }
 
     return Container(
-      width: 180,
+      width: AppConstants.userPanelWidth,
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.95),
         border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
