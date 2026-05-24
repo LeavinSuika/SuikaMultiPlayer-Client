@@ -47,7 +47,7 @@ class SuikaApp extends StatelessWidget {
       builder: (context, child) {
         return Stack(
           children: [
-            if (child != null) child,
+            if (child != null) ExcludeSemantics(child: child),
             Positioned(
               top: 0, right: 0,
               child: Row(

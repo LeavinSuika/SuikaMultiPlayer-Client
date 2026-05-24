@@ -50,14 +50,14 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
 
   @override
   Widget build(BuildContext context) {
-    final room = ref.watch(roomProvider);
-    final player = ref.watch(playerProvider);
+    final isInRoom = ref.watch(roomProvider.select((r) => r.currentRoom != null));
+    final playerStatus = ref.watch(playerProvider.select((p) => p.status));
+    final track = ref.watch(playerProvider.select((p) => p.currentTrack));
     final theme = Theme.of(context);
-    final isInRoom = room.currentRoom != null;
 
     if (!isInRoom) return const SizedBox.shrink();
 
-    final track = player.status == PlayerStatus.idle ? null : player.currentTrack;
+    final showTrack = playerStatus == PlayerStatus.idle ? null : track;
 
     return Container(
       height: 64,
@@ -68,7 +68,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
       child: Row(
         children: [
           const SizedBox(width: 12),
-          _AlbumArt(track: track),
+          _AlbumArt(track: showTrack),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -78,7 +78,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                   children: [
                     Expanded(
                       child: Text(
-                        track?.name ?? '未在播放',
+                        showTrack?.name ?? '未在播放',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.9)),
                       ),
@@ -89,7 +89,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
                 Row(
                   children: [
                     Text(
-                      track?.artist ?? '',
+                      showTrack?.artist ?? '',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.4)),
                     ),
@@ -102,7 +102,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
           ),
           GestureDetector(
             onTap: () {
-              if (track != null) {
+              if (showTrack != null) {
                 ref.read(playerProvider.notifier).togglePlayPause();
               } else {
                 _playFirstInPlaylist();
@@ -111,7 +111,7 @@ class _MiniPlayerState extends ConsumerState<MiniPlayer> {
             child: Container(
               width: 36, height: 36,
               child: Icon(
-                player.status == PlayerStatus.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                playerStatus == PlayerStatus.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 size: 24, color: Colors.white.withValues(alpha: 0.7),
               ),
             ),
@@ -170,12 +170,12 @@ class _ProgressBar extends ConsumerStatefulWidget {
 class _ProgressBarState extends ConsumerState<_ProgressBar> {
   @override
   Widget build(BuildContext context) {
-    final player = ref.watch(playerProvider);
-    final track = player.currentTrack;
-    final duration = player.duration > Duration.zero
-        ? player.duration
-        : (track?.durationMs != null ? Duration(milliseconds: track!.durationMs!) : Duration.zero);
-    final pos = player.position;
+    final pos = ref.watch(playerProvider.select((p) => p.position));
+    final dur = ref.watch(playerProvider.select((p) => p.duration));
+    final trackDurationMs = ref.watch(playerProvider.select((p) => p.currentTrack?.durationMs));
+    final duration = dur > Duration.zero
+        ? dur
+        : (trackDurationMs != null ? Duration(milliseconds: trackDurationMs) : Duration.zero);
 
     return SizedBox(
       height: 14,
@@ -349,7 +349,7 @@ class _VolumeButtonState extends ConsumerState<_VolumeButton>
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Icon(
-          ref.watch(playerProvider).volume > 0 ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+          ref.watch(playerProvider.select((p) => p.volume)) > 0 ? Icons.volume_up_rounded : Icons.volume_off_rounded,
           size: 20,
           color: Colors.white.withValues(alpha: 0.6),
         ),
@@ -361,7 +361,7 @@ class _VolumeButtonState extends ConsumerState<_VolumeButton>
 class _VolumeSlider extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final volume = ref.watch(playerProvider).volume;
+    final volume = ref.watch(playerProvider.select((p) => p.volume));
     final notifier = ref.read(playerProvider.notifier);
     return RotatedBox(
       quarterTurns: -1,
