@@ -513,7 +513,12 @@ class _PlaylistSheet extends ConsumerWidget {
               Text('歌单队列 (${playlist.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
               const Spacer(),
               TextButton.icon(
-                onPressed: () => showAddSongDialog(context),
+                onPressed: () {
+                  final rootContext =
+                      Navigator.of(context, rootNavigator: true).context;
+                  Navigator.of(context).pop();
+                  showAddSongDialog(rootContext);
+                },
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('添加歌曲'),
               ),

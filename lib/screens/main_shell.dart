@@ -156,7 +156,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   Widget build(BuildContext context) {
     final tab = ref.watch(sidebarTabProvider);
-    final isInRoom = ref.watch(roomProvider.select((r) => r.enteredRoomId != null));
+    final roomState = ref.watch(roomProvider);
+    final isInRoom = roomState.enteredRoomId != null &&
+        roomState.currentRoom?.roomId == roomState.enteredRoomId;
 
     // Stop player when entering a different room
     ref.listen<RoomState>(roomProvider, _onRoomStateChange);

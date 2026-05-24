@@ -612,10 +612,9 @@ class _TrackInfo extends StatelessWidget {
                   size: 17, color: Colors.white.withValues(alpha: 0.35)),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
+                child: SelectableText(
                   track.artist,
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.white.withValues(alpha: 0.45),
@@ -634,10 +633,9 @@ class _TrackInfo extends StatelessWidget {
                     size: 17, color: Colors.white.withValues(alpha: 0.3)),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(
+                  child: SelectableText(
                     track.album!,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white.withValues(alpha: 0.35),
@@ -676,10 +674,9 @@ class _ScaledTitleState extends State<_ScaledTitle> {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (ctx, constraints) {
-      return Text(
+      return SelectableText(
         widget.text,
         maxLines: 2,
-        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: _fontSize,
           fontWeight: FontWeight.w800,

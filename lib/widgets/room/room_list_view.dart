@@ -5,6 +5,7 @@ import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/providers/music_provider.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/sidebar_provider.dart';
+import 'package:suika_multi_player/providers/user_cache_provider.dart';
 
 class RoomListView extends ConsumerWidget {
   const RoomListView({super.key});
@@ -111,6 +112,11 @@ class _CurrentRoomCard extends ConsumerWidget {
                   room.isPublic ? '公开' : '私密',
                   style: const TextStyle(fontSize: 13, color: Colors.white38),
                 ),
+                const SizedBox(width: 16),
+                const Icon(Icons.person_rounded,
+                    size: 16, color: Colors.white38),
+                const SizedBox(width: 6),
+                _CreatorName(creatorUuid: room.creatorUuid),
               ],
             ),
             const SizedBox(height: 16),
@@ -141,6 +147,25 @@ class _CurrentRoomCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CreatorName extends ConsumerWidget {
+  final String creatorUuid;
+  const _CreatorName({required this.creatorUuid});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.read(userCacheProvider.notifier).fetchUser(creatorUuid);
+    final uc = ref.watch(userCacheProvider);
+    final user = uc[creatorUuid];
+    final name = user?.nickname ?? user?.userName ?? creatorUuid.substring(0, 8);
+    return Text(
+      '创建者：$name',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(fontSize: 13, color: Colors.white38),
     );
   }
 }

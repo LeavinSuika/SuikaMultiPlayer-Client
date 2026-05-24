@@ -13,12 +13,14 @@ class ContentArea extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tab = ref.watch(sidebarTabProvider);
-    final isInRoom = ref.watch(roomProvider).enteredRoomId != null;
+    final roomState = ref.watch(roomProvider);
+    final isViewingEnteredRoom = roomState.enteredRoomId != null &&
+        roomState.currentRoom?.roomId == roomState.enteredRoomId;
 
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: switch (tab) {
-        SidebarTab.player => isInRoom ? const LyricsView() : const RoomListView(),
+        SidebarTab.player => isViewingEnteredRoom ? const LyricsView() : const RoomListView(),
         SidebarTab.profile => const ProfileScreen(),
         SidebarTab.settings => const SettingsScreen(),
         _ => const LyricsView(),
