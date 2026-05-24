@@ -6,12 +6,27 @@ import 'package:suika_multi_player/providers/music_provider.dart';
 import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/websocket_provider.dart';
 import 'package:suika_multi_player/utils/center_toast.dart';
+import 'package:suika_multi_player/widgets/search/link_input_view.dart';
 
 class SearchView extends ConsumerStatefulWidget {
-  const SearchView({super.key});
+  final VoidCallback? onClose;
+  const SearchView({super.key, this.onClose});
 
   @override
   ConsumerState<SearchView> createState() => _SearchViewState();
+}
+
+void showSearchOverlay(BuildContext context) {
+  showDialog(
+    context: context,
+    barrierColor: Colors.black54,
+    builder: (_) => Dialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 60),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SearchView(onClose: () => Navigator.pop(context)),
+    ),
+  );
 }
 
 class _SearchViewState extends ConsumerState<SearchView> {
@@ -45,44 +60,74 @@ class _SearchViewState extends ConsumerState<SearchView> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(20),
-          child: TextField(
-            controller: _searchCtrl,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: '搜索歌曲...',
-              prefixIcon: Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.4)),
-              suffixIcon: _searchCtrl.text.isNotEmpty
-                  ? IconButton(icon: const Icon(Icons.clear_rounded, size: 18), onPressed: () {
-                      _searchCtrl.clear();
-                      ref.read(searchProvider.notifier).clear();
-                      setState(() {});
-                    })
-                  : null,
-            ),
-            onSubmitted: (v) {
-              if (v.trim().isNotEmpty) {
-                ref.read(searchProvider.notifier).search(v.trim());
-              }
-            },
-            onChanged: (_) => setState(() {}),
+          padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: '搜索歌曲...',
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 14),
+                    prefixIcon: Icon(Icons.search_rounded, size: 20, color: Colors.white.withValues(alpha: 0.4)),
+                    suffixIcon: _searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              ref.read(searchProvider.notifier).clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    isDense: true,
+                  ),
+                  onSubmitted: (v) {
+                    if (v.trim().isNotEmpty) {
+                      ref.read(searchProvider.notifier).search(v.trim());
+                    }
+                  },
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              if (widget.onClose != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  onPressed: widget.onClose,
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  color: Colors.white.withValues(alpha: 0.5),
+                  tooltip: '关闭',
+                ),
+              ],
+            ],
           ),
         ),
-        Expanded(
+        Flexible(
           child: results.when(
             data: (tracks) => tracks.isEmpty
-                ? Center(
+                ? Padding(
+                    padding: const EdgeInsets.all(40),
                     child: Text(
                       _searchCtrl.text.isNotEmpty ? '无搜索结果' : '输入关键词搜索歌曲',
                       style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.35)),
                     ),
                   )
                 : ListView.builder(
+                    shrinkWrap: true,
                     itemCount: tracks.length,
                     itemBuilder: (_, i) => _TrackTile(track: tracks[i], onAdd: () => _addTrack(tracks[i])),
                   ),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, _) => Center(child: Text('搜索出错', style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.7)))),
+            loading: () => const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+            error: (err, _) => Padding(
+              padding: const EdgeInsets.all(40),
+              child: Center(child: Text('搜索出错', style: TextStyle(color: Colors.redAccent.withValues(alpha: 0.7)))),
+            ),
           ),
         ),
       ],
@@ -129,4 +174,67 @@ class _TrackTile extends StatelessWidget {
       ),
     );
   }
+}
+
+void showAddSongDialog(BuildContext context) {
+  showDialog(
+    context: context,
+    barrierColor: Colors.black54,
+    builder: (ctx) => Dialog(
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 280,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '添加歌曲',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    showSearchOverlay(context);
+                  },
+                  icon: const Icon(Icons.search_rounded, size: 20),
+                  label: const Text('搜索歌曲'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    showLinkInputOverlay(context);
+                  },
+                  icon: const Icon(Icons.link_rounded, size: 20),
+                  label: const Text('输入链接'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }

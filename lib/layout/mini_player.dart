@@ -9,6 +9,7 @@ import 'package:suika_multi_player/providers/room_provider.dart';
 import 'package:suika_multi_player/providers/user_cache_provider.dart';
 import 'package:suika_multi_player/providers/websocket_provider.dart';
 import 'package:suika_multi_player/providers/sidebar_provider.dart';
+import 'package:suika_multi_player/widgets/search/search_view.dart';
 
 class MiniPlayer extends ConsumerStatefulWidget {
   const MiniPlayer({super.key});
@@ -512,8 +513,9 @@ class _PlaylistSheet extends ConsumerWidget {
               Text('歌单队列 (${playlist.length})', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white)),
               const Spacer(),
               TextButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.add, size: 18), label: const Text('添加歌曲'),
+                onPressed: () => showAddSongDialog(context),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('添加歌曲'),
               ),
             ]),
           ),
