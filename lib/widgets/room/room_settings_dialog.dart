@@ -28,6 +28,8 @@ class _RoomSettingsDialogState extends ConsumerState<RoomSettingsDialog> {
   List<RoomMember> _members = [];
   bool _loading = true;
   String? _error;
+  bool _isPublic = true;
+  bool _toggling = false;
 
   @override
   void initState() {
@@ -38,9 +40,11 @@ class _RoomSettingsDialogState extends ConsumerState<RoomSettingsDialog> {
   Future<void> _load() async {
     try {
       final api = ref.read(apiServiceProvider);
-      final detail = await api.fetchRoom(widget.roomId);
+      final userUuid = ref.read(authProvider).user?.userUuid;
+      final detail = await api.fetchRoom(widget.roomId, userUuid: userUuid);
       setState(() {
         _members = detail.roomMembersDetail;
+        _isPublic = detail.isPublic;
         _loading = false;
       });
       // 预加载用户缓存
@@ -91,6 +95,31 @@ class _RoomSettingsDialogState extends ConsumerState<RoomSettingsDialog> {
             message: '操作失败: $e',
             backgroundColor: Colors.redAccent.withValues(alpha: 0.85));
       }
+    }
+  }
+
+  Future<void> _togglePublic(bool value) async {
+    final user = ref.read(authProvider).user;
+    if (user == null) return;
+    setState(() => _toggling = true);
+    try {
+      await ref.read(apiServiceProvider).setRoomIsPublic(
+            operatorUuid: user.userUuid,
+            roomId: widget.roomId,
+            isPublic: value,
+          );
+      if (mounted) {
+        setState(() => _isPublic = value);
+        showCenterToast(context, message: value ? '已设为公开' : '已设为私密');
+      }
+    } catch (e) {
+      if (mounted) {
+        showCenterToast(context,
+            message: '切换失败: $e',
+            backgroundColor: Colors.redAccent.withValues(alpha: 0.85));
+      }
+    } finally {
+      if (mounted) setState(() => _toggling = false);
     }
   }
 
@@ -170,6 +199,44 @@ class _RoomSettingsDialogState extends ConsumerState<RoomSettingsDialog> {
               ),
             ),
             const SizedBox(height: 12),
+            // 公开/私密切换
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Icon(
+                    _isPublic ? Icons.lock_open_rounded : Icons.lock_rounded,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    _isPublic ? '公开房间' : '私密房间',
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withValues(alpha: 0.7)),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _isPublic ? '所有人可搜索和加入' : '仅可通过 ID 加入',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.3)),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    height: 28,
+                    child: Switch.adaptive(
+                      value: _isPublic,
+                      onChanged: _toggling ? null : _togglePublic,
+                      activeTrackColor: Colors.greenAccent,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1),
             // 成员列表
             if (_loading)
               const Padding(

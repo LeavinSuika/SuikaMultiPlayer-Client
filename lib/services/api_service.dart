@@ -200,9 +200,10 @@ class ApiService {
     }
   }
 
-  Future<RoomDetail> fetchRoom(int roomId) async {
+  Future<RoomDetail> fetchRoom(int roomId, {String? userUuid}) async {
     final data = _parse(await _client.post('/api/fetch_room', data: {
       'room_id': roomId,
+      if (userUuid != null) 'user_uuid': userUuid,
     }));
     if (data['success'] != true) {
       throw Exception(data['message'] ?? '获取房间信息失败');
@@ -284,6 +285,21 @@ class ApiService {
     }
   }
 
+  Future<void> setRoomIsPublic({
+    required String operatorUuid,
+    required int roomId,
+    required bool isPublic,
+  }) async {
+    final data = _parse(await _client.post('/api/set_room_is_public', data: {
+      'operator_uuid': operatorUuid,
+      'room_id': roomId,
+      'is_public': isPublic,
+    }));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '切换失败');
+    }
+  }
+
   Future<void> kickRoomMember({
     required String operatorUuid,
     required int roomId,
@@ -305,6 +321,102 @@ class ApiService {
       throw Exception(data['message'] ?? '获取用户房间失败');
     }
     return (data['rooms'] as List<dynamic>)
+        .map((e) => e as Map<String, dynamic>)
+        .toList();
+  }
+
+  Future<void> banUser({
+    required String operatorUuid,
+    required String userUuid,
+    String? banReason,
+    String? pardonTime,
+  }) async {
+    final data = _parse(await _client.post('/api/ban_user', data: {
+      'operator_uuid': operatorUuid,
+      'user_uuid': userUuid,
+      if (banReason != null) 'ban_reason': banReason,
+      if (pardonTime != null) 'pardon_time': pardonTime,
+    }));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '封禁失败');
+    }
+  }
+
+  Future<void> unbanUser({
+    required String operatorUuid,
+    required String userUuid,
+  }) async {
+    final data = _parse(await _client.post('/api/unban_user', data: {
+      'operator_uuid': operatorUuid,
+      'user_uuid': userUuid,
+    }));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '解封失败');
+    }
+  }
+
+  Future<void> banIp({
+    required String operatorUuid,
+    required String ip,
+    String? banReason,
+    String? pardonTime,
+  }) async {
+    final data = _parse(await _client.post('/api/ban_ip', data: {
+      'operator_uuid': operatorUuid,
+      'ip': ip,
+      if (banReason != null) 'ban_reason': banReason,
+      if (pardonTime != null) 'pardon_time': pardonTime,
+    }));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '封禁IP失败');
+    }
+  }
+
+  Future<void> unbanIp({
+    required String operatorUuid,
+    required String ip,
+  }) async {
+    final data = _parse(await _client.post('/api/unban_ip', data: {
+      'operator_uuid': operatorUuid,
+      'ip': ip,
+    }));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '解封IP失败');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> adminListUsers(
+      String operatorUuid) async {
+    final data = _parse(await _client.get(
+        '/api/admin/users?operator_uuid=$operatorUuid'));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '查询失败');
+    }
+    return (data['users'] as List<dynamic>)
+        .map((e) => e as Map<String, dynamic>)
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> adminListBannedUsers(
+      String operatorUuid) async {
+    final data = _parse(await _client.get(
+        '/api/admin/banned_users?operator_uuid=$operatorUuid'));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '查询失败');
+    }
+    return (data['users'] as List<dynamic>)
+        .map((e) => e as Map<String, dynamic>)
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> adminListBannedIps(
+      String operatorUuid) async {
+    final data = _parse(await _client.get(
+        '/api/admin/banned_ips?operator_uuid=$operatorUuid'));
+    if (data['success'] != true) {
+      throw Exception(data['message'] ?? '查询失败');
+    }
+    return (data['ips'] as List<dynamic>)
         .map((e) => e as Map<String, dynamic>)
         .toList();
   }
