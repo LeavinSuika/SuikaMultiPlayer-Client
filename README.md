@@ -34,6 +34,11 @@ SuikaMultiPlayer Client 是 SuikaMultiPlayer 的 Flutter 桌面客户端，提�
 | 主题 | Material 3 深色主题 |
 | 字体 | MiSans |
 
+### TODO List
+
+- [ ] 投票切歌
+- [ ] 随机播放
+
 ---
 
 ## 🚀 快速开始
