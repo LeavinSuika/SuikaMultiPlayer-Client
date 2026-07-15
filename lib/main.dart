@@ -40,7 +40,7 @@ class SuikaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Suika Mulit Player',
+      title: 'Suika Multi Player',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: const SplashScreen(),

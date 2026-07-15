@@ -27,9 +27,9 @@ class Toolbar extends ConsumerWidget implements PreferredSizeWidget {
         child: Row(
           children: [
             const SizedBox(width: 12),
-            Icon(Icons.music_note_rounded, size: 20, color: theme.colorScheme.primary),
+            Image.asset('assets/images/icon_clear.png', width: 20, height: 20),
             const SizedBox(width: 6),
-            Text('Suika Mulit Player',
+            Text('Suika Multi Player',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
             const SizedBox(width: 24),
             if (user != null) ...[

@@ -1,26 +1,28 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:suika_multi_player/config/api_config.dart';
+import 'package:suika_multi_player/providers/auth_provider.dart';
 import 'package:suika_multi_player/screens/main_shell.dart';
 import 'package:suika_multi_player/widgets/crop_avatar_dialog.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _userNameCtrl = TextEditingController();
   final _pwdCtrl = TextEditingController();
   bool _obscure = true;
   final _hostCtrl = TextEditingController(text: ApiConfig.host);
   final _portCtrl = TextEditingController(text: ApiConfig.port.toString());
+  bool _useSSL = ApiConfig.useSSL;
   bool _showServer = false;
   bool _loading = false;
   String? _error;
@@ -41,51 +43,51 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
       _loading = true;
     });
+
+    // 确保服务器配置已应用到 ApiConfig
+    _applyServerConfig();
+
     try {
-      final dio = _createDio();
-      final resp = await dio.post('/api/login', data: {
-        'user_name': _userNameCtrl.text.trim(),
-        'pwd': _pwdCtrl.text,
-      });
-      final data = resp.data as Map<String, dynamic>;
-      if (data['success'] != true) {
-        if (!mounted) return;
+      await ref.read(authProvider.notifier).login(
+        _userNameCtrl.text.trim(),
+        _pwdCtrl.text,
+      );
+      if (!mounted) return;
+
+      // 检查登录结果
+      final authState = ref.read(authProvider);
+      if (authState.error != null) {
         setState(() {
-          _error = data['message'] ?? '登录失败';
+          _error = authState.error;
           _loading = false;
         });
+        ref.read(authProvider.notifier).clearError();
         return;
       }
-      await SharedPreferences.getInstance().then((prefs) {
-        prefs.setString('user_uuid', data['user_uuid'] as String);
-      });
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const MainShell()),
-      );
-    } on DioException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = '连接失败: ${e.message ?? "请检查服务器地址和端口"}';
-        _loading = false;
-      });
+
+      if (authState.isLoggedIn) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const MainShell()),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '错误: $e';
+        _error = '连接失败: $e';
         _loading = false;
       });
     }
   }
 
-  Dio _createDio() {
-    return Dio(BaseOptions(
-      baseUrl: 'http://${_hostCtrl.text.trim()}:${_portCtrl.text.trim()}',
-      connectTimeout: const Duration(seconds: 5),
-      receiveTimeout: const Duration(seconds: 5),
-      headers: {'Content-Type': 'application/json'},
-    ));
+  void _applyServerConfig() {
+    final h = _hostCtrl.text.trim();
+    final p = int.tryParse(_portCtrl.text.trim()) ?? 8001;
+    if (h.isNotEmpty) {
+      ApiConfig.host = h;
+      ApiConfig.port = p;
+    }
+    ApiConfig.useSSL = _useSSL;
   }
 
   void _toggleServer() {
@@ -98,9 +100,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (h.isEmpty) return;
     ApiConfig.host = h;
     ApiConfig.port = p;
+    ApiConfig.useSSL = _useSSL;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('server_host', h);
     await prefs.setString('server_port', p.toString());
+    await prefs.setString('server_use_ssl', _useSSL.toString());
     setState(() => _showServer = false);
   }
 
@@ -122,13 +126,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(20),
                       gradient: const LinearGradient(colors: [Colors.white, Color(0xFF9E9E9E)]),
                     ),
-                    child: const Icon(Icons.music_note_rounded, size: 36, color: Color(0xFF1A1A1A)),
+                    child: Image.asset('assets/images/icon_clear.png', width: 36, height: 36),
                   ),
                 ),
                 const SizedBox(height: 24),
                 Text('欢迎回来', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white.withValues(alpha: 0.95))),
                 const SizedBox(height: 8),
-                Text('登录 Suika Mulit Player', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.45))),
+                Text('登录 Suika Multi Player', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.45))),
                 const SizedBox(height: 36),
                 Form(
                   key: _formKey,
@@ -186,10 +190,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   onTap: _toggleServer,
                   child: Row(
                     children: [
-                      Icon(Icons.dns_rounded, size: 14, color: Colors.white.withValues(alpha: 0.35)),
+                      Icon(_useSSL ? Icons.lock_rounded : Icons.lock_open_rounded, size: 14, color: Colors.white.withValues(alpha: 0.35)),
                       const SizedBox(width: 8),
-                      Text('服务器: ${_hostCtrl.text}:${_portCtrl.text}', style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35))),
+                      Text('${_hostCtrl.text}:${_portCtrl.text}', style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35))),
                       const Spacer(),
+                      Text(_useSSL ? 'HTTPS' : 'HTTP', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.25))),
+                      const SizedBox(width: 8),
                       Icon(_showServer ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 18, color: Colors.white.withValues(alpha: 0.35)),
                     ],
                   ),
@@ -206,6 +212,29 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: Container(width: 36, height: 36, decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: Colors.white), child: const Icon(Icons.check_rounded, size: 18, color: Color(0xFF1A1A1A))),
                     ),
                   ]),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        _useSSL ? Icons.lock_rounded : Icons.lock_open_rounded,
+                        size: 18,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _useSSL ? 'HTTPS' : 'HTTP',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      const Spacer(),
+                      Switch(
+                        value: _useSSL,
+                        onChanged: (v) => setState(() => _useSSL = v),
+                      ),
+                    ],
+                  ),
                 ],
               ],
             ),
@@ -216,14 +245,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class RegisterScreen extends StatefulWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _userNameCtrl = TextEditingController();
   final _pwdCtrl = TextEditingController();
@@ -231,6 +260,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscure = true;
   final _hostCtrl = TextEditingController(text: ApiConfig.host);
   final _portCtrl = TextEditingController(text: ApiConfig.port.toString());
+  bool _useSSL = ApiConfig.useSSL;
   bool _showServer = false;
   bool _loading = false;
   String? _error;
@@ -275,84 +305,83 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _error = null;
       _loading = true;
     });
-    try {
-      final dio = _createDio();
-      final baseUrl = dio.options.baseUrl;
 
+    // 确保服务器配置已应用到 ApiConfig
+    _applyServerConfig();
+
+    try {
       // 如果选择了头像，先上传
       if (_avatarPath != null && _avatarImageId == null) {
-        final filename = _avatarPath!.split('/').last.split('\\').last;
-        final formData = FormData.fromMap({
-          'file': await MultipartFile.fromFile(_avatarPath!, filename: filename),
-        });
-        final uploadResp = await dio.post('$baseUrl/api/upload_image', data: formData);
-        final uploadData = uploadResp.data is Map
-            ? uploadResp.data as Map<String, dynamic>
-            : uploadResp.data;
-        if (uploadData is Map && uploadData['success'] == true) {
+        try {
+          final api = ref.read(apiServiceProvider);
+          final uploadData = await api.uploadImage(_avatarPath!);
           _avatarImageId = uploadData['image_id'] as String;
           _avatarUrl = uploadData['url'] as String;
+        } catch (e) {
+          if (!mounted) return;
+          setState(() {
+            _error = '头像上传失败: $e';
+            _loading = false;
+          });
+          return;
         }
       }
 
       // 注册
-      final resp = await dio.post('/api/register', data: {
-        'user_name': _userNameCtrl.text.trim(),
-        'pwd': _pwdCtrl.text,
-        'nickname': _nicknameCtrl.text.trim(),
-      });
-      final data = resp.data as Map<String, dynamic>;
-      if (data['success'] != true) {
-        if (!mounted) return;
+      await ref.read(authProvider.notifier).register(
+        _userNameCtrl.text.trim(),
+        _pwdCtrl.text,
+        _nicknameCtrl.text.trim(),
+      );
+      if (!mounted) return;
+
+      // 检查注册结果
+      final authState = ref.read(authProvider);
+      if (authState.error != null) {
         setState(() {
-          _error = data['message'] ?? '注册失败';
+          _error = authState.error;
           _loading = false;
         });
+        ref.read(authProvider.notifier).clearError();
         return;
       }
-      final userUuid = data['user_uuid'] as String;
 
       // 如果上传了头像，注册后更新头像
-      if (_avatarImageId != null && _avatarUrl != null) {
+      if (_avatarImageId != null && _avatarUrl != null && authState.user != null) {
         try {
-          await dio.post('/api/update_avatar', data: {
-            'user_uuid': userUuid,
-            'avatar_url': _avatarUrl,
-            'avatar_key': _avatarImageId,
-          });
+          final api = ref.read(apiServiceProvider);
+          await api.updateAvatar(
+            userUuid: authState.user!.userUuid,
+            avatarUrl: _avatarUrl!,
+            avatarKey: _avatarImageId!,
+          );
+          // 刷新用户信息以获取最新头像
+          await ref.read(authProvider.notifier).refreshUser();
         } catch (_) {}
       }
 
-      await SharedPreferences.getInstance().then((prefs) {
-        prefs.setString('user_uuid', userUuid);
-      });
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const MainShell()),
       );
-    } on DioException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = '连接失败: ${e.message ?? "请检查服务器地址和端口"}';
-        _loading = false;
-      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '错误: $e';
+        _error = '连接失败: $e';
         _loading = false;
       });
     }
   }
 
-  Dio _createDio() {
-    return Dio(BaseOptions(
-      baseUrl: 'http://${_hostCtrl.text.trim()}:${_portCtrl.text.trim()}',
-      connectTimeout: const Duration(seconds: 5),
-      receiveTimeout: const Duration(seconds: 5),
-      headers: {'Content-Type': 'application/json'},
-    ));
+  void _applyServerConfig() {
+    final h = _hostCtrl.text.trim();
+    final p = int.tryParse(_portCtrl.text.trim()) ?? 8001;
+    if (h.isNotEmpty) {
+      ApiConfig.host = h;
+      ApiConfig.port = p;
+    }
+    ApiConfig.useSSL = _useSSL;
   }
 
   void _toggleServer() {
@@ -365,9 +394,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (h.isEmpty) return;
     ApiConfig.host = h;
     ApiConfig.port = p;
+    ApiConfig.useSSL = _useSSL;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('server_host', h);
     await prefs.setString('server_port', p.toString());
+    await prefs.setString('server_use_ssl', _useSSL.toString());
     setState(() => _showServer = false);
   }
 
@@ -382,7 +413,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: ListView(
               padding: const EdgeInsets.all(40),
               children: [
-                Center(child: const Icon(Icons.music_note_rounded, size: 48, color: Colors.white)),
+                Center(child: Image.asset('assets/images/icon_clear.png', width: 48, height: 48)),
                 const SizedBox(height: 16),
                 Text('创建账号', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white.withValues(alpha: 0.95))),
                 const SizedBox(height: 24),
@@ -493,10 +524,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   onTap: _toggleServer,
                   child: Row(
                     children: [
-                      Icon(Icons.dns_rounded, size: 14, color: Colors.white.withValues(alpha: 0.35)),
+                      Icon(_useSSL ? Icons.lock_rounded : Icons.lock_open_rounded, size: 14, color: Colors.white.withValues(alpha: 0.35)),
                       const SizedBox(width: 8),
-                      Text('服务器: ${_hostCtrl.text}:${_portCtrl.text}', style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35))),
+                      Text('${_hostCtrl.text}:${_portCtrl.text}', style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35))),
                       const Spacer(),
+                      Text(_useSSL ? 'HTTPS' : 'HTTP', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.25))),
+                      const SizedBox(width: 8),
                       Icon(_showServer ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 18, color: Colors.white.withValues(alpha: 0.35)),
                     ],
                   ),
@@ -513,6 +546,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       child: Container(width: 36, height: 36, decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: Colors.white), child: const Icon(Icons.check_rounded, size: 18, color: Color(0xFF1A1A1A))),
                     ),
                   ]),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(
+                        _useSSL ? Icons.lock_rounded : Icons.lock_open_rounded,
+                        size: 18,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _useSSL ? 'HTTPS' : 'HTTP',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      const Spacer(),
+                      Switch(
+                        value: _useSSL,
+                        onChanged: (v) => setState(() => _useSSL = v),
+                      ),
+                    ],
+                  ),
                 ],
               ],
             ),

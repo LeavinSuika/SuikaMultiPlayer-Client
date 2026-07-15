@@ -63,10 +63,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         user.avatarUrl!,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) =>
-                            _buildInitials(user.nickname, user.userName),
+                            _buildDefaultAvatar(),
                       ),
                     )
-                  : _buildInitials(user.nickname, user.userName),
+                  : _buildDefaultAvatar(),
             ),
           ),
           const SizedBox(height: 16),
@@ -139,18 +139,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _buildInitials(String nickname, String userName) {
-    final letter = nickname.isNotEmpty
-        ? nickname[0].toUpperCase()
-        : userName[0].toUpperCase();
-    return Center(
-      child: Text(
-        letter,
-        style: const TextStyle(
-          fontSize: 36,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
+  Widget _buildDefaultAvatar() {
+    return ClipOval(
+      child: Image.asset(
+        'assets/images/default_avatar.png',
+        width: 88,
+        height: 88,
+        fit: BoxFit.cover,
       ),
     );
   }

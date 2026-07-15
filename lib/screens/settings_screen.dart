@@ -53,8 +53,12 @@ class SettingsScreen extends ConsumerWidget {
           _ServerConfigTile(
             host: config.host,
             port: config.port,
+            useSSL: config.useSSL,
             onUpdate: (host, port) {
               ref.read(serverConfigProvider.notifier).update(host, port);
+            },
+            onToggleSSL: (value) {
+              ref.read(serverConfigProvider.notifier).setUseSSL(value);
             },
           ),
           if (user?.isAdmin == true) ...[
@@ -159,12 +163,16 @@ class _SectionTitle extends StatelessWidget {
 class _ServerConfigTile extends StatefulWidget {
   final String host;
   final int port;
+  final bool useSSL;
   final void Function(String host, int port) onUpdate;
+  final void Function(bool value) onToggleSSL;
 
   const _ServerConfigTile({
     required this.host,
     required this.port,
+    required this.useSSL,
     required this.onUpdate,
+    required this.onToggleSSL,
   });
 
   @override
@@ -301,6 +309,28 @@ class _ServerConfigTileState extends State<_ServerConfigTile> {
                       child: const Icon(Icons.check_rounded,
                           size: 18, color: Colors.white),
                     ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(
+                    widget.useSSL ? Icons.lock_rounded : Icons.lock_open_rounded,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    widget.useSSL ? 'HTTPS' : 'HTTP',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.7)),
+                  ),
+                  const Spacer(),
+                  Switch(
+                    value: widget.useSSL,
+                    onChanged: widget.onToggleSSL,
                   ),
                 ],
               ),

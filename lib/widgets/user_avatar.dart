@@ -16,25 +16,35 @@ class UserAvatar extends StatelessWidget {
 
   bool get _hasAvatar => avatarUrl != null && avatarUrl!.isNotEmpty;
 
+  static const _defaultAvatar = 'assets/images/default_avatar.png';
+
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? Colors.white.withValues(alpha: 0.1);
-
     return SizedBox(
       width: radius * 2,
       height: radius * 2,
-      child: _hasAvatar
-          ? ClipOval(
-              child: Image.network(
+      child: ClipOval(
+        child: _hasAvatar
+            ? Image.network(
                 avatarUrl!,
                 width: radius * 2,
                 height: radius * 2,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    _fallbackCircle(bg),
-              ),
-            )
-          : _fallbackCircle(bg),
+                errorBuilder: (_, __, ___) => _defaultImage(),
+              )
+            : _defaultImage(),
+      ),
+    );
+  }
+
+  Widget _defaultImage() {
+    return Image.asset(
+      _defaultAvatar,
+      width: radius * 2,
+      height: radius * 2,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _fallbackCircle(
+          backgroundColor ?? Colors.white.withValues(alpha: 0.1)),
     );
   }
 
