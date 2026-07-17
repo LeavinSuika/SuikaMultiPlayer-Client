@@ -3,17 +3,25 @@ tag-template: '$RESOLVED_VERSION'
 
 categories:
   - title: '🚀 新功能'
-    labels:
-      - 'feat'
-      - 'feature'
-      - 'enhancement'
+    when:
+      labels:
+        - 'feat'
+        - 'feature'
+        - 'enhancement'
+    semver-increment: minor
+
   - title: '🐛 修复'
-    labels:
-      - 'fix'
-      - 'bugfix'
-      - 'bug'
+    when:
+      labels:
+        - 'fix'
+        - 'bugfix'
+        - 'bug'
+    semver-increment: patch
+
   - title: '🧹 维护'
-    label: 'chore'
+    when:
+      label: 'chore'
+      
   - type: 'pre-exclude'
     when:
       label: 'skip-changelog'
