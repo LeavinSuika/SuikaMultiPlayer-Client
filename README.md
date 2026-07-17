@@ -50,7 +50,7 @@ SuikaMultiPlayer Client 是 SuikaMultiPlayer 的 Flutter 桌面客户端，提�
 
 - Flutter SDK 3.11+
 - Windows 10/11
-- 已启动的 [SuikaMultiPlayer Server](../SuikaMultiPlayer-Server/)（默认 `127.0.0.1:8001`）
+- 已启动的 [SuikaMultiPlayer Server](https://github.com/LeavinSuika/SuikaMultiPlayer-Server)（默认 `127.0.0.1:8001`）
 
 ### 安装与运行
 
@@ -192,8 +192,7 @@ MainShell 初始化：
 
 ## 🔗 相关链接
 
-- [SuikaMultiPlayer Server](../SuikaMultiPlayer-Server/) — 后端服务
-- [项目架构文档](../ARCHITECTURE.md) — 完整架构说明
+- [SuikaMultiPlayer Server](https://github.com/LeavinSuika/SuikaMultiPlayer-Server) — 后端服务
 
 ---
 
