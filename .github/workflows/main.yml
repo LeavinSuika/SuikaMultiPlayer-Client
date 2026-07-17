@@ -1,0 +1,46 @@
+name: build
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.6' 
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows app
+        run: flutter build windows --release
+
+      - name: Create zip archive
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath SuikaMultiPlayer-Beta-v${{ github.ref_name }}-windows.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: SuikaMultiPlayer-Beta-v${{ github.ref_name }}-windows.zip
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Beta v${{ github.ref_name }}
+          files: SuikaMultiPlayer-Beta-v*-windows.zip
+          allowUpdates: true
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
