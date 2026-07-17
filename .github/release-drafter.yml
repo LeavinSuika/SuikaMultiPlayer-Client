@@ -18,22 +18,6 @@ categories:
     when:
       label: 'skip-changelog'
 
-version-resolver:
-  major:
-    labels:
-      - 'major'
-  minor:
-    labels:
-      - 'feat'
-      - 'feature'
-      - 'enhancement'
-  patch:
-    labels:
-      - 'fix'
-      - 'bugfix'
-      - 'bug'
-  default: patch
-
 change-template: '- $TITLE (#$NUMBER) @$AUTHOR'
 
 template: |
