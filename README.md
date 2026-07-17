@@ -198,4 +198,4 @@ MainShell 初始化：
 
 ## 📄 许可证
 
-本项目基于 MIT 许可证开源，详见 [LICENSE](../SuikaMultiPlayer-Server/LICENSE)。
+本项目基于 GNU GPL v3 许可证开源，详见 [LICENSE](./LICENSE)。
